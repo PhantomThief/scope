@@ -17,7 +17,11 @@ import javax.annotation.Nullable;
 /**
  * @author w.vela
  */
-public class ScopeUtils {
+public abstract class ScopeUtils {
+
+    private ScopeUtils() {
+        throw new UnsupportedOperationException();
+    }
 
     private static Runnable wrapRunnableExistScope(@Nullable Scope scope,
             @Nonnull Runnable runnable) {
@@ -27,11 +31,6 @@ public class ScopeUtils {
     private static <T> Supplier<T> wrapSupplierExistScope(@Nullable Scope scope,
             @Nonnull Supplier<T> supplier) {
         return () -> supplyWithExistScope(scope, supplier::get);
-    }
-
-    private static <T> Callable<T> wrapCallableExistScope(@Nullable Scope scope,
-            @Nonnull Callable<T> supplier) {
-        return () -> supplyWithExistScope(scope, supplier::call);
     }
 
     /**
