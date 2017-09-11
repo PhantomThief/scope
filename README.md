@@ -34,4 +34,42 @@ public void basicUse() {
          }, executor);
     });
 }
+
+// 或者声明一个Scope友好的ExecutorService，方法如下:
+private static class ScopeThreadPoolExecutor extends ThreadPoolExecutor {
+
+    ScopeThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime,
+            TimeUnit unit, BlockingQueue<Runnable> workQueue) {
+        super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
+    }
+
+    static ScopeThreadPoolExecutor newFixedThreadPool(int nThreads) {
+        return new ScopeThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
+    }
+
+    // 只要override这一个方法就可以
+    // 所有submit, invokeAll等方法都会代理到这里来
+    @Override
+    public void execute(Runnable command) {
+        Scope scope = getCurrentScope();
+        assertNotNull(scope);
+        super.execute(() -> {
+            Scope scope1 = getCurrentScope();
+            assertNull(scope1);
+            runWithExistScope(scope, command::run);
+        });
+    }
+}
+
+private ExecutorService executor = ScopeThreadPoolExecutor.newFixedThreadPool(10);
+
+public void executeTest() {
+    runWithNewScope(() -> {
+       TEST_KEY.set("abc");
+       executor.submit(() -> {
+           TEST_KEY.get(); // get abc
+       });
+    });
+}
 ```

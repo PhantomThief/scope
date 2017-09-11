@@ -8,20 +8,30 @@ import static com.github.phantomthief.scope.ScopeKey.withDefaultValue;
 import static com.github.phantomthief.scope.ScopeKey.withInitializer;
 import static com.github.phantomthief.scope.ScopeUtils.runAsyncWithCurrentScope;
 import static com.github.phantomthief.scope.ScopeUtils.supplyAsyncWithCurrentScope;
+import static com.github.phantomthief.util.MoreFunctions.throwing;
 import static com.google.common.util.concurrent.MoreExecutors.shutdownAndAwaitTermination;
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
+import static java.util.concurrent.CompletableFuture.supplyAsync;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.toList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 
@@ -147,7 +157,7 @@ public class ScopeTest {
             runWithNewScope(() -> {
                 TEST_KEY.set(1);
                 assertEquals(TEST_KEY.get(), Integer.valueOf(1));
-                Scope currentScope = Scope.getCurrentScope();
+                Scope currentScope = getCurrentScope();
                 scope[0] = currentScope;
                 thread.join();
             });
@@ -157,11 +167,69 @@ public class ScopeTest {
         System.out.println("main test ok.");
     }
 
+    @Test
+    public void testScopeExecutor() throws Exception {
+        ExecutorService executorService = ScopeThreadPoolExecutor.newFixedThreadPool(10);
+        runWithNewScope(() -> {
+            TEST_KEY.set(1);
+            assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+            executorService.execute(() -> {
+                System.out.println("execute:" + TEST_KEY.get());
+                assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+            });
+            System.out.println(executorService.submit(() -> {
+                System.out.println("submit:" + TEST_KEY.get());
+                assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+                return 1;
+            }).get());
+            List<Callable<Integer>> callableList = new ArrayList<>();
+            for (int i = 0; i < 50; i++) {
+                int j = i;
+                callableList.add(() -> {
+                    assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+                    return j;
+                });
+            }
+            System.out.println("invoke all:" + executorService.invokeAll(callableList).stream() //
+                    .map(f -> throwing(f::get)) //
+                    .collect(toList()));
+            System.out.println("supply async:" + supplyAsync(() -> { //
+                assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+                return 1;
+            }, executorService).get());
+        });
+        shutdownAndAwaitTermination(executorService, 1, DAYS);
+    }
+
     private ExecutorService newBlockingThreadPool(int thread, String name) {
         ExecutorService executor = newFixedThreadPool(thread, new ThreadFactoryBuilder() //
                 .setNameFormat(name) //
                 .build());
         ((ThreadPoolExecutor) executor).setRejectedExecutionHandler(new CallerRunsPolicy());
         return executor;
+    }
+
+    private static class ScopeThreadPoolExecutor extends ThreadPoolExecutor {
+
+        ScopeThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime,
+                TimeUnit unit, BlockingQueue<Runnable> workQueue) {
+            super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
+        }
+
+        static ScopeThreadPoolExecutor newFixedThreadPool(int nThreads) {
+            return new ScopeThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>());
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            Scope scope = getCurrentScope();
+            assertNotNull(scope);
+            super.execute(() -> {
+                Scope scope1 = getCurrentScope();
+                assertNull(scope1);
+                runWithExistScope(scope, command::run);
+            });
+        }
     }
 }
