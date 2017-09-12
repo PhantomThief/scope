@@ -168,6 +168,26 @@ public class ScopeTest {
     }
 
     @Test
+    public void testRestoreOldScope() {
+        Scope[] scope = { null };
+        new Thread(() -> {
+            runWithNewScope(() -> {
+                TEST_KEY.set(2);
+                scope[0] = getCurrentScope();
+            });
+        }).start();
+        runWithNewScope(() -> {
+            TEST_KEY.set(1);
+            assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+            while (scope[0] == null) {
+                sleepUninterruptibly(10, MILLISECONDS);
+            }
+            runWithExistScope(scope[0], () -> assertEquals(TEST_KEY.get(), Integer.valueOf(2)));
+            assertEquals(TEST_KEY.get(), Integer.valueOf(1));
+        });
+    }
+
+    @Test
     public void testScopeExecutor() throws Exception {
         ExecutorService executorService = ScopeThreadPoolExecutor.newFixedThreadPool(10);
         runWithNewScope(() -> {

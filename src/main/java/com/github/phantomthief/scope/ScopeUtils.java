@@ -17,10 +17,9 @@ import javax.annotation.Nullable;
 /**
  * @author w.vela
  */
-public abstract class ScopeUtils {
+public final class ScopeUtils {
 
     private ScopeUtils() {
-        throw new UnsupportedOperationException();
     }
 
     private static Runnable wrapRunnableExistScope(@Nullable Scope scope,
