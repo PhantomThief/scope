@@ -43,22 +43,22 @@ private static class ScopeThreadPoolExecutor extends ThreadPoolExecutor {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
     }
 
+    /**
+     * same as {@link java.util.concurrent.Executors#newFixedThreadPool(int)}
+     */ 
     static ScopeThreadPoolExecutor newFixedThreadPool(int nThreads) {
         return new ScopeThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<Runnable>());
     }
 
-    // 只要override这一个方法就可以
-    // 所有submit, invokeAll等方法都会代理到这里来
+    /**
+     * 只要override这一个方法就可以
+     * 所有submit, invokeAll等方法都会代理到这里来
+     */
     @Override
     public void execute(Runnable command) {
         Scope scope = getCurrentScope();
-        assertNotNull(scope);
-        super.execute(() -> {
-            Scope scope1 = getCurrentScope();
-            assertNull(scope1);
-            runWithExistScope(scope, command::run);
-        });
+        super.execute(() -> runWithExistScope(scope, command::run));
     }
 }
 
