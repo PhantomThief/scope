@@ -16,12 +16,12 @@ import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toList;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,19 +33,20 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * @author w.vela
  */
-public class ScopeTest {
+class ScopeTest {
 
     private static final ScopeKey<Integer> TEST_KEY = allocate();
 
     @Test
-    public void testScope() {
+    void testScope() {
         ExecutorService executorService = newBlockingThreadPool(20, "main-%d");
         ExecutorService anotherExecutor = newBlockingThreadPool(20, "another-%d");
         for (int i = 0; i < 10; i++) {
@@ -75,7 +76,7 @@ public class ScopeTest {
     }
 
     @Test
-    public void testInit() {
+    void testInit() {
         ScopeKey<Object> test2 = withInitializer(Object::new);
         assertNull(test2.get());
         runWithNewScope(() -> {
@@ -88,7 +89,7 @@ public class ScopeTest {
     }
 
     @Test
-    public void testDefaultValue() {
+    void testDefaultValue() {
         ScopeKey<String> key1 = withDefaultValue("test");
         assertEquals(key1.get(), "test"); // anyway, default value is ok.
         runWithNewScope(() -> {
@@ -102,7 +103,7 @@ public class ScopeTest {
     }
 
     @Test
-    public void testSet() {
+    void testSet() {
         ScopeKey<String> key1 = allocate();
         assertFalse(key1.set("test"));
         assertNull(key1.get());
@@ -113,20 +114,16 @@ public class ScopeTest {
     }
 
     @Test
-    public void testDuplicateStartScope() {
-        runWithNewScope(() -> {
-            try {
-                runWithNewScope(() -> {
-                    fail();
-                });
-            } catch (IllegalStateException e) {
-                assertTrue(true);
-            }
+    void testDuplicateStartScope() {
+        runWithNewScope(() -> { //
+            assertThrows(IllegalStateException.class, () -> runWithNewScope(() -> { //
+                Assertions.fail("");
+            }));
         });
     }
 
     @Test
-    public void testRemoveKey() {
+    void testRemoveKey() {
         runWithNewScope(() -> {
             TEST_KEY.set(999);
             assertEquals(TEST_KEY.get(), Integer.valueOf(999));
@@ -136,7 +133,7 @@ public class ScopeTest {
     }
 
     @Test
-    public void testScopeOverride() {
+    void testScopeOverride() {
         Scope[] scope = { null };
         Thread thread = new Thread(() -> {
             runWithNewScope(() -> {
@@ -168,7 +165,7 @@ public class ScopeTest {
     }
 
     @Test
-    public void testRestoreOldScope() {
+    void testRestoreOldScope() {
         Scope[] scope = { null };
         new Thread(() -> {
             runWithNewScope(() -> {
@@ -188,7 +185,7 @@ public class ScopeTest {
     }
 
     @Test
-    public void testScopeExecutor() throws Exception {
+    void testScopeExecutor() throws Exception {
         ExecutorService executorService = ScopeThreadPoolExecutor.newFixedThreadPool(10);
         runWithNewScope(() -> {
             TEST_KEY.set(1);
@@ -238,7 +235,7 @@ public class ScopeTest {
 
         static ScopeThreadPoolExecutor newFixedThreadPool(int nThreads) {
             return new ScopeThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>());
+                    new LinkedBlockingQueue<>());
         }
 
         @Override

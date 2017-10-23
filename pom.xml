@@ -10,7 +10,7 @@
 
         <!-- test -->
         <guava.version>20.0</guava.version>
-        <junit.version>4.12</junit.version>
+        <junit-jupiter-api.version>5.0.1</junit-jupiter-api.version>
 
         <!-- plugin -->
         <maven-compiler-plugin.version>3.7.0</maven-compiler-plugin.version>
@@ -73,9 +73,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>${junit.version}</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit-jupiter-api.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
