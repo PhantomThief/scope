@@ -3,16 +3,19 @@ package com.github.phantomthief.scope;
 import static com.github.phantomthief.scope.Scope.getCurrentScope;
 import static com.github.phantomthief.scope.Scope.runWithExistScope;
 import static com.github.phantomthief.scope.Scope.supplyWithExistScope;
-import static java.util.concurrent.CompletableFuture.runAsync;
-import static java.util.concurrent.CompletableFuture.supplyAsync;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
 
 /**
  * @author w.vela
@@ -36,16 +39,33 @@ public final class ScopeUtils {
      * replace for {@link Executor#execute(Runnable)}, {@link java.util.concurrent.ExecutorService#submit(Runnable)},
      * {@link java.util.concurrent.ExecutorService#submit(Runnable, Object)} or {@link CompletableFuture#runAsync(Runnable, Executor)}
      */
-    public static CompletableFuture<Void> runAsyncWithCurrentScope(@Nonnull Runnable runnable,
+    public static void runAsyncWithCurrentScope(@Nonnull Runnable runnable,
             @Nonnull Executor executor) {
-        return runAsync(wrapRunnableExistScope(getCurrentScope(), runnable), executor);
+        executor.execute(wrapRunnableExistScope(getCurrentScope(), runnable));
+    }
+
+    /**
+     * replace for {@link Executor#execute(Runnable)}, {@link java.util.concurrent.ExecutorService#submit(Runnable)},
+     * {@link java.util.concurrent.ExecutorService#submit(Runnable, Object)} or {@link CompletableFuture#runAsync(Runnable, Executor)}
+     */
+    public static ListenableFuture<?> runAsyncWithCurrentScope(@Nonnull Runnable runnable,
+            @Nonnull ListeningExecutorService executor) {
+        return executor.submit(wrapRunnableExistScope(getCurrentScope(), runnable));
     }
 
     /**
      * replace for {@link java.util.concurrent.ExecutorService#submit(Callable)} or {@link CompletableFuture#supplyAsync(Supplier, Executor)}
      */
-    public static <U> CompletableFuture<U>
-            supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier, @Nonnull Executor executor) {
-        return supplyAsync(wrapSupplierExistScope(getCurrentScope(), supplier), executor);
+    public static <U> Future<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
+            @Nonnull ExecutorService executor) {
+        return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
+    }
+
+    /**
+     * replace for {@link java.util.concurrent.ExecutorService#submit(Callable)} or {@link CompletableFuture#supplyAsync(Supplier, Executor)}
+     */
+    public static <U> ListenableFuture<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
+            @Nonnull ListeningExecutorService executor) {
+        return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
     }
 }
