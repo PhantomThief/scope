@@ -9,6 +9,7 @@ import static com.github.phantomthief.scope.ScopeKey.withInitializer;
 import static com.github.phantomthief.scope.ScopeUtils.runAsyncWithCurrentScope;
 import static com.github.phantomthief.scope.ScopeUtils.supplyAsyncWithCurrentScope;
 import static com.github.phantomthief.util.MoreFunctions.throwing;
+import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static com.google.common.util.concurrent.MoreExecutors.shutdownAndAwaitTermination;
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import static java.util.concurrent.CompletableFuture.supplyAsync;
@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -49,6 +51,8 @@ class ScopeTest {
     void testScope() {
         ExecutorService executorService = newBlockingThreadPool(20, "main-%d");
         ExecutorService anotherExecutor = newBlockingThreadPool(20, "another-%d");
+        ListeningExecutorService anotherExecutor2 = listeningDecorator(
+                newBlockingThreadPool(20, "another-%d"));
         for (int i = 0; i < 10; i++) {
             int j = i;
             supplyAsyncWithCurrentScope(() -> { //
@@ -64,6 +68,12 @@ class ScopeTest {
                                     "i'm in exist scope id:" + j + ", from scope:" + fromScope1);
                             assertEquals(j, fromScope1.intValue());
                         }, anotherExecutor);
+                        runAsyncWithCurrentScope(() -> {
+                            Integer fromScope1 = TEST_KEY.get();
+                            System.out.println(
+                                    "i'm in exist scope id:" + j + ", from scope:" + fromScope1);
+                            assertEquals(j, fromScope1.intValue());
+                        }, anotherExecutor2);
                     }
                 });
                 return "NONE";
@@ -72,6 +82,7 @@ class ScopeTest {
         }
         shutdownAndAwaitTermination(executorService, 1, DAYS);
         shutdownAndAwaitTermination(anotherExecutor, 1, DAYS);
+        shutdownAndAwaitTermination(anotherExecutor2, 1, DAYS);
         System.out.println("fin.");
     }
 
