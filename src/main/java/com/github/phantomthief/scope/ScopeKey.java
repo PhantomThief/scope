@@ -4,6 +4,8 @@ import static com.github.phantomthief.scope.Scope.getCurrentScope;
 
 import java.util.function.Supplier;
 
+import javax.annotation.Nonnull;
+
 /**
  * 强类型数据读写的封装
  *
@@ -19,6 +21,7 @@ public final class ScopeKey<T> {
         this.initializer = initializer;
     }
 
+    @Nonnull
     public static <T> ScopeKey<T> allocate() {
         return withDefaultValue(null);
     }
@@ -26,6 +29,7 @@ public final class ScopeKey<T> {
     /**
      * @param defaultValue 如果未执行 {@link #set} 或者在非Scope，调用 {@link #get} 返回的默认值
      */
+    @Nonnull
     public static <T> ScopeKey<T> withDefaultValue(T defaultValue) {
         return new ScopeKey<>(defaultValue, null);
     }
@@ -43,6 +47,7 @@ public final class ScopeKey<T> {
      * return obj;
      * }</pre>
      */
+    @Nonnull
     public static <T> ScopeKey<T> withInitializer(Supplier<T> initializer) {
         return new ScopeKey<>(null, initializer);
     }

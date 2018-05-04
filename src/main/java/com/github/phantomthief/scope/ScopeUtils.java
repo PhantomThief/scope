@@ -38,16 +38,19 @@ public final class ScopeUtils {
         executor.execute(wrapRunnableExistScope(getCurrentScope(), runnable));
     }
 
+    @Nonnull
     public static ListenableFuture<?> runAsyncWithCurrentScope(@Nonnull Runnable runnable,
             @Nonnull ListeningExecutorService executor) {
         return executor.submit(wrapRunnableExistScope(getCurrentScope(), runnable));
     }
 
+    @Nonnull
     public static <U> Future<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
             @Nonnull ExecutorService executor) {
         return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
     }
 
+    @Nonnull
     public static <U> ListenableFuture<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
             @Nonnull ListeningExecutorService executor) {
         return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
