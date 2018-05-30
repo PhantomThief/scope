@@ -36,24 +36,29 @@ public final class ScopeKey<T> {
         return new ScopeKey<>(defaultValue, null);
     }
 
+    @Nonnull
     public static ScopeKey<Boolean> withDefaultValue(boolean defaultValue) {
         return withDefaultValue(Boolean.valueOf(defaultValue));
     }
 
+    @Nonnull
     public static ScopeKey<Integer> withDefaultValue(int defaultValue) {
         return withDefaultValue(Integer.valueOf(defaultValue));
     }
 
+    @Nonnull
     public static ScopeKey<Long> withDefaultValue(long defaultValue) {
         return withDefaultValue(Long.valueOf(defaultValue));
     }
 
     @SuppressWarnings("unchecked")
+    @Nonnull
     public static ScopeKey<String> withDefaultValue(String defaultValue) {
         return (ScopeKey) withDefaultValue((Object) defaultValue);
     }
 
     @SuppressWarnings("unchecked")
+    @Nonnull
     public static <T extends Enum<T>> ScopeKey<T> withDefaultValue(T defaultValue) {
         return (ScopeKey) withDefaultValue((Object) defaultValue);
     }
