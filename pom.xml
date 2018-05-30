@@ -12,6 +12,7 @@
         <guava.version>20.0</guava.version>
         <junit-jupiter.version>5.0.2</junit-jupiter.version>
         <junit-platform.version>1.0.2</junit-platform.version>
+        <logback-classic.version>1.2.3</logback-classic.version>
 
         <!-- plugin -->
         <maven-compiler-plugin.version>3.7.0</maven-compiler-plugin.version>
@@ -77,6 +78,12 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>${junit-jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback-classic.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

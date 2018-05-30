@@ -1,10 +1,16 @@
 package com.github.phantomthief.scope;
 
 import static com.github.phantomthief.scope.Scope.getCurrentScope;
+import static com.google.common.collect.Lists.newArrayList;
+import static java.lang.Thread.currentThread;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 import javax.annotation.Nonnull;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 强类型数据读写的封装
@@ -13,6 +19,7 @@ import javax.annotation.Nonnull;
  */
 public final class ScopeKey<T> {
 
+    private static final Logger logger = LoggerFactory.getLogger(ScopeKey.class);
     private final T defaultValue;
     private final Supplier<T> initializer;
 
@@ -33,6 +40,7 @@ public final class ScopeKey<T> {
     @Nonnull
     @Deprecated
     public static <T> ScopeKey<T> withDefaultValue(T defaultValue) {
+        outputDeprecatedLog();
         return new ScopeKey<>(defaultValue, null);
     }
 
@@ -107,6 +115,29 @@ public final class ScopeKey<T> {
             return true;
         } else {
             return false;
+        }
+    }
+
+    private static void outputDeprecatedLog() {
+        List<StackTraceElement> stackTrace = newArrayList(currentThread().getStackTrace());
+        boolean[] after = { false };
+        int[] count = { 0 };
+        String location = stackTrace.stream() //
+                .filter(stack -> {
+                    if (stack.getClassName().equals(ScopeKey.class.getName())) {
+                        count[0]++;
+                        after[0] = true;
+                        return false;
+                    }
+                    return after[0];
+                }) //
+                .map(stack -> stack.getFileName() + ":" + stack.getLineNumber()) //
+                .findFirst() //
+                .orElse(null);
+
+        if (count[0] == 2) {
+            logger.warn("found deprecated call ScopeKey.withDefaultValue at location:({})",
+                    location);
         }
     }
 }
