@@ -23,15 +23,39 @@ public final class ScopeKey<T> {
 
     @Nonnull
     public static <T> ScopeKey<T> allocate() {
-        return withDefaultValue(null);
+        return (ScopeKey<T>) withDefaultValue((Object) null);
     }
 
     /**
      * @param defaultValue 如果未执行 {@link #set} 或者在非Scope，调用 {@link #get} 返回的默认值
+     * 请使用 {@link #withInitializer(Supplier)} 或者其它重载版本代替
      */
     @Nonnull
+    @Deprecated
     public static <T> ScopeKey<T> withDefaultValue(T defaultValue) {
         return new ScopeKey<>(defaultValue, null);
+    }
+
+    public static ScopeKey<Boolean> withDefaultValue(boolean defaultValue) {
+        return withDefaultValue(Boolean.valueOf(defaultValue));
+    }
+
+    public static ScopeKey<Integer> withDefaultValue(int defaultValue) {
+        return withDefaultValue(Integer.valueOf(defaultValue));
+    }
+
+    public static ScopeKey<Long> withDefaultValue(long defaultValue) {
+        return withDefaultValue(Long.valueOf(defaultValue));
+    }
+
+    @SuppressWarnings("unchecked")
+    public static ScopeKey<String> withDefaultValue(String defaultValue) {
+        return (ScopeKey) withDefaultValue((Object) defaultValue);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T extends Enum<T>> ScopeKey<T> withDefaultValue(T defaultValue) {
+        return (ScopeKey) withDefaultValue((Object) defaultValue);
     }
 
     /**
