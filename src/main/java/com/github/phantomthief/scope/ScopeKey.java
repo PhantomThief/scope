@@ -1,10 +1,7 @@
 package com.github.phantomthief.scope;
 
 import static com.github.phantomthief.scope.Scope.getCurrentScope;
-import static com.google.common.collect.Lists.newArrayList;
-import static java.lang.Thread.currentThread;
 
-import java.util.List;
 import java.util.function.Supplier;
 
 import javax.annotation.Nonnull;
@@ -30,50 +27,42 @@ public final class ScopeKey<T> {
 
     @Nonnull
     public static <T> ScopeKey<T> allocate() {
-        return (ScopeKey<T>) withDefaultValue((Object) null);
+        return withDefaultValue0(null);
     }
 
-    /**
-     * @param defaultValue 如果未执行 {@link #set} 或者在非Scope，调用 {@link #get} 返回的默认值
-     * 请使用 {@link #withInitializer(Supplier)} 或者其它重载版本代替
-     */
     @Nonnull
-    @Deprecated
-    public static <T> ScopeKey<T> withDefaultValue(T defaultValue) {
-        outputDeprecatedLog();
+    private static <T> ScopeKey<T> withDefaultValue0(T defaultValue) {
         return new ScopeKey<>(defaultValue, null);
     }
 
     @Nonnull
     public static ScopeKey<Boolean> withDefaultValue(boolean defaultValue) {
-        return withDefaultValue(Boolean.valueOf(defaultValue));
+        return withDefaultValue0(defaultValue);
     }
 
     @Nonnull
     public static ScopeKey<Integer> withDefaultValue(int defaultValue) {
-        return withDefaultValue(Integer.valueOf(defaultValue));
+        return withDefaultValue0(defaultValue);
     }
 
     @Nonnull
     public static ScopeKey<Long> withDefaultValue(long defaultValue) {
-        return withDefaultValue(Long.valueOf(defaultValue));
+        return withDefaultValue0(defaultValue);
     }
 
     @Nonnull
     public static ScopeKey<Double> withDefaultValue(double defaultValue) {
-        return withDefaultValue(Double.valueOf(defaultValue));
+        return withDefaultValue0(defaultValue);
     }
 
-    @SuppressWarnings("unchecked")
     @Nonnull
     public static ScopeKey<String> withDefaultValue(String defaultValue) {
-        return (ScopeKey) withDefaultValue((Object) defaultValue);
+        return withDefaultValue0(defaultValue);
     }
 
-    @SuppressWarnings("unchecked")
     @Nonnull
     public static <T extends Enum<T>> ScopeKey<T> withDefaultValue(T defaultValue) {
-        return (ScopeKey) withDefaultValue((Object) defaultValue);
+        return withDefaultValue0(defaultValue);
     }
 
     /**
@@ -120,29 +109,6 @@ public final class ScopeKey<T> {
             return true;
         } else {
             return false;
-        }
-    }
-
-    private static void outputDeprecatedLog() {
-        List<StackTraceElement> stackTrace = newArrayList(currentThread().getStackTrace());
-        boolean[] after = { false };
-        int[] count = { 0 };
-        String location = stackTrace.stream() //
-                .filter(stack -> {
-                    if (stack.getClassName().equals(ScopeKey.class.getName())) {
-                        count[0]++;
-                        after[0] = true;
-                        return false;
-                    }
-                    return after[0];
-                }) //
-                .map(stack -> stack.getFileName() + ":" + stack.getLineNumber()) //
-                .findFirst() //
-                .orElse(null);
-
-        if (count[0] == 2) {
-            logger.warn("found deprecated call ScopeKey.withDefaultValue at location:({})",
-                    location);
         }
     }
 }
