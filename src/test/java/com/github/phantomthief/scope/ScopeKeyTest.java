@@ -24,6 +24,7 @@ class ScopeKeyTest {
             new ArrayList<>());
     private static final ScopeKey<Integer> INT_SCOPE_KEY = withDefaultValue(1);
     private static final ScopeKey<Long> LONG_SCOPE_KEY = withDefaultValue(1L);
+    private static final ScopeKey<Double> DOUBLE_SCOPE_KEY = withDefaultValue(0.0D);
     private static final ScopeKey<String> STRING_SCOPE_KEY = withDefaultValue("abc");
     private static final ScopeKey<TestEnum> ENUM_SCOPE_KEY = withDefaultValue(ABC);
     private static final ScopeKey<Boolean> BOOLEAN_SCOPE_KEY = withDefaultValue(true);
@@ -33,6 +34,7 @@ class ScopeKeyTest {
     void testApiCompile() {
         assertEquals(Integer.valueOf(1), INT_SCOPE_KEY.get());
         assertEquals(Long.valueOf(1), LONG_SCOPE_KEY.get());
+        assertEquals(Double.valueOf(0.0D), DOUBLE_SCOPE_KEY.get());
         assertEquals("abc", STRING_SCOPE_KEY.get());
         assertSame(ABC, ENUM_SCOPE_KEY.get());
         assertTrue(BOOLEAN_SCOPE_KEY.get());

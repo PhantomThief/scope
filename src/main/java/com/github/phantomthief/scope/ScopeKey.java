@@ -59,6 +59,11 @@ public final class ScopeKey<T> {
         return withDefaultValue(Long.valueOf(defaultValue));
     }
 
+    @Nonnull
+    public static ScopeKey<Double> withDefaultValue(double defaultValue) {
+        return withDefaultValue(Double.valueOf(defaultValue));
+    }
+
     @SuppressWarnings("unchecked")
     @Nonnull
     public static ScopeKey<String> withDefaultValue(String defaultValue) {
