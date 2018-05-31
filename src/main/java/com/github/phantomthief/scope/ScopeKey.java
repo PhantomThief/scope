@@ -6,9 +6,6 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nonnull;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * 强类型数据读写的封装
  *
@@ -16,7 +13,6 @@ import org.slf4j.LoggerFactory;
  */
 public final class ScopeKey<T> {
 
-    private static final Logger logger = LoggerFactory.getLogger(ScopeKey.class);
     private final T defaultValue;
     private final Supplier<T> initializer;
 
