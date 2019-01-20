@@ -119,21 +119,24 @@ public class ScopeAsyncRetry {
 
         // 开始当前一次调用尝试
         final SettableFuture<T> currentTry = SettableFuture.create();
+        ListenableFuture<T> callingFuture = null;
         try {
-            Futures.addCallback(func.get(), setAllResultToOtherSettableFuture(currentTry));
+            callingFuture = func.get();
+            Futures.addCallback(callingFuture, setAllResultToOtherSettableFuture(currentTry));
         } catch (Throwable t) {
             currentTry.setException(t);
         }
         // 看是先超时还是先执行完成或者执行抛异常
         scheduler.schedule(() -> {
             currentTry.setException(new TimeoutException());
-            if (retryConfig.hedge) {
-                // hedge模式下，不cancel之前的尝试，之前的调用一旦成功就set到最终结果里
-                Futures.transform(currentTry, resultFuture::set);
-            } else {
+            if (!retryConfig.hedge) {
                 currentTry.cancel(false);
             }
         }, singleCallTimeout, TimeUnit.MILLISECONDS);
+        if (retryConfig.hedge) {
+            // hedge模式下，不cancel之前的尝试，之前的调用一旦成功就set到最终结果里
+            Futures.transform(callingFuture, resultFuture::set);
+        }
 
         if (retryConfig.retryInterval < 0) {
             // 如果不会再重试了，那就不管什么结果都set到最终结果里吧

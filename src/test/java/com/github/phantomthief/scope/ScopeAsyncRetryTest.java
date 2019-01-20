@@ -11,18 +11,22 @@ import static java.time.Duration.ofMillis;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
 import com.github.phantomthief.util.ThrowableSupplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 /**
  * @author w.vela
@@ -130,6 +134,43 @@ class ScopeAsyncRetryTest {
                     () -> future4.get(1600, MILLISECONDS));
             assertSame(IllegalArgumentException.class, exception4.getCause().getClass());
         }
+        endScope();
+    }
+
+    private static AtomicInteger idx = new AtomicInteger(0);
+    private static final long[] delayTimeArray = { 210, 900, 500, 900 };
+
+    private static void delaySomeTime() {
+        Uninterruptibles.sleepUninterruptibly(delayTimeArray[idx.getAndIncrement()],
+                TimeUnit.MILLISECONDS);
+    }
+
+    @Test
+    void testHedge() throws Throwable {
+        beginScope();
+        initKey();
+
+        AtomicInteger calledTimes = new AtomicInteger(0);
+
+        long ts = System.currentTimeMillis();
+        ListenableFuture<String> future = retrier.retry(200, retryNTimes(3, 10, false),
+                () -> executor.submit(() -> {
+                    int id = calledTimes.incrementAndGet();
+                    delaySomeTime();
+                    //                    throw new IllegalStateException();
+                    return id + " -- done!";
+                }));
+        String result = null;
+        try {
+            result = future.get();
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+        long tsEnd = System.currentTimeMillis();
+        System.out.println(tsEnd - ts);
+        System.out.println(calledTimes.get());
+        System.out.println(result);
+
         endScope();
     }
 
