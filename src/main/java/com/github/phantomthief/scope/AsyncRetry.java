@@ -43,17 +43,27 @@ public class AsyncRetry {
         };
     }
 
+    /**
+     * 带重试的调用
+     *
+     * @param func 需要重试的调用
+     * @param singleCallTimeout 单次调用超时限制，单位：ms
+     * @param retryTime 重试次数
+     * @param retryInterval 重试间隔，单位：ms
+     * @return 带重试的future
+     */
     public static <T> ListenableFuture<T> withRetry(@Nonnull Supplier<ListenableFuture<T>> func,
-            long singleCallTimeout, int retryTime) {
+            long singleCallTimeout, int retryTime, long retryInterval) {
         SettableFuture<T> resultFuture = SettableFuture.create();
-        return callWithRetry(func, singleCallTimeout, retryTime, resultFuture);
+        return callWithRetry(func, singleCallTimeout, retryTime, retryInterval, resultFuture);
     }
 
     /**
      * 内部递归方法，返回值是最终的挂了多个retry callback的future
      */
     private static <T> SettableFuture<T> callWithRetry(@Nonnull Supplier<ListenableFuture<T>> func,
-            long singleCallTimeout, int retryTime, SettableFuture<T> resultFuture) {
+            long singleCallTimeout, int retryTime, long retryInterval,
+            SettableFuture<T> resultFuture) {
 
         Scope scope = getCurrentScope();
         // 开始当前一次调用尝试
@@ -83,10 +93,23 @@ public class AsyncRetry {
         // 为了用lambda ...
         SettableFuture<T> resultFuture0 = resultFuture;
         if (retryTime > 0) {
-            ListenableFuture<T> tmp = catchingAsync(currentTry, Throwable.class,
-                    x -> callWithRetry(func, singleCallTimeout, retryTime - 1, resultFuture0));
+            // SettableFuture类型不好处理，后边也用不到set了
+            ListenableFuture<T> currentTry0 = currentTry;
+            if (retryInterval > 0) {
+                // 需要等一会儿再重试的话，挂一个重试任务
+                currentTry0 = catchingAsync(currentTry0, RetryIntervalSignal.class,
+                        x -> scheduler.schedule(() -> {
+                            throw new RetryIntervalSignal();
+                        }, retryInterval, TimeUnit.MILLISECONDS));
+            }
+
+            catchingAsync(currentTry0, Throwable.class, x -> callWithRetry(func, singleCallTimeout,
+                    retryTime - 1, retryInterval, resultFuture0));
         }
 
         return resultFuture;
+    }
+
+    private static class RetryIntervalSignal extends TimeoutException {
     }
 }

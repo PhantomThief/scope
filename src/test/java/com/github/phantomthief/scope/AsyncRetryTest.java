@@ -20,7 +20,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 public class AsyncRetryTest {
 
     private static AtomicInteger idx = new AtomicInteger(0);
-    private static final long[] delayTimeArray = { 50, 90, 50, 900 };
+    private static final long[] delayTimeArray = { 100, 60, 20, 10 };
 
     private static void delaySomeTime() {
         Uninterruptibles.sleepUninterruptibly(delayTimeArray[idx.getAndIncrement()],
@@ -37,9 +37,9 @@ public class AsyncRetryTest {
 
         ListenableFuture<String> future = withRetry(() -> executor.submit(() -> {
             delaySomeTime();
-            throw new IllegalStateException();
-            //            return "done!";
-        }), 200, 3);
+            //            throw new IllegalStateException();
+            return "done!";
+        }), 25, 2, 100);
 
         try {
             future.get();
