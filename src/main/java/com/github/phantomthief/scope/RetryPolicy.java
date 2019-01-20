@@ -17,8 +17,23 @@ public interface RetryPolicy {
     }
 
     static RetryPolicy retryNTimes(int times, @Nonnegative long delayInMs) {
+        return retryNTimes(times, delayInMs, true);
+    }
+
+    static RetryPolicy retryNTimes(int times, @Nonnegative long delayInMs, boolean hedge) {
         checkArgument(delayInMs >= 0, "delayInMs must be non-negative.");
-        return (retryCount) -> retryCount <= times ? delayInMs : NO_RETRY;
+        return new RetryPolicy() {
+
+            @Override
+            public long retry(int retryCount) {
+                return retryCount <= times ? delayInMs : NO_RETRY;
+            }
+
+            @Override
+            public boolean hedge() {
+                return hedge;
+            }
+        };
     }
 
     /**
@@ -27,7 +42,11 @@ public interface RetryPolicy {
      */
     long retry(int retryCount);
 
-    default boolean cancelExceptionalFuture() {
+    /**
+     * 返回true则不cancel任何一次重试，重试过程中任何一次返回成功都拿来做最终结果
+     * 返回false则开始下一次重试时，之前超时的请求就算后来结果成功返回也没有用
+     */
+    default boolean hedge() {
         return true;
     }
 }
