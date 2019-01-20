@@ -133,7 +133,7 @@ public class ScopeAsyncRetry {
                 currentTry.cancel(false);
             }
         }, singleCallTimeout, TimeUnit.MILLISECONDS);
-        if (retryConfig.hedge) {
+        if (retryConfig.hedge && callingFuture != null) {
             // hedge模式下，不cancel之前的尝试，之前的调用一旦成功就set到最终结果里
             Futures.transform(callingFuture, resultFuture::set);
         }

@@ -11,7 +11,7 @@ import static java.time.Duration.ofMillis;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
@@ -138,7 +138,7 @@ class ScopeAsyncRetryTest {
     }
 
     private static AtomicInteger idx = new AtomicInteger(0);
-    private static final long[] delayTimeArray = { 210, 900, 500, 900 };
+    private static final long[] delayTimeArray = { 300, 900, 500, 900 };
 
     private static void delaySomeTime() {
         Uninterruptibles.sleepUninterruptibly(delayTimeArray[idx.getAndIncrement()],
@@ -146,13 +146,13 @@ class ScopeAsyncRetryTest {
     }
 
     @Test
-    void testHedge() throws Throwable {
+    void testNotHedge() throws Throwable {
         beginScope();
         initKey();
+        idx.set(0);
 
         AtomicInteger calledTimes = new AtomicInteger(0);
 
-        long ts = System.currentTimeMillis();
         ListenableFuture<String> future = retrier.retry(200, retryNTimes(3, 10, false),
                 () -> executor.submit(() -> {
                     int id = calledTimes.incrementAndGet();
@@ -164,12 +164,37 @@ class ScopeAsyncRetryTest {
         try {
             result = future.get();
         } catch (Throwable t) {
-            t.printStackTrace();
+            // ignore
         }
-        long tsEnd = System.currentTimeMillis();
-        System.out.println(tsEnd - ts);
-        System.out.println(calledTimes.get());
-        System.out.println(result);
+        assertNull(result);
+        assertEquals(4, calledTimes.get());
+
+        endScope();
+    }
+
+    @Test
+    void testHedge() throws Throwable {
+        beginScope();
+        initKey();
+        idx.set(0);
+
+        AtomicInteger calledTimes = new AtomicInteger(0);
+
+        ListenableFuture<String> future = retrier.retry(200, retryNTimes(3, 10, true),
+                () -> executor.submit(() -> {
+                    int id = calledTimes.incrementAndGet();
+                    delaySomeTime();
+                    //                    throw new IllegalStateException();
+                    return id + " -- done!";
+                }));
+        String result = null;
+        try {
+            result = future.get();
+        } catch (Throwable t) {
+            // ignore
+        }
+        assertEquals("1 -- done!", result);
+        assertEquals(2, calledTimes.get());
 
         endScope();
     }
