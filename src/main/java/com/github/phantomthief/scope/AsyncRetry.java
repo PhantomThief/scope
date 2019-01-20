@@ -96,13 +96,13 @@ public class AsyncRetry {
             // SettableFuture类型不好处理，后边也用不到set了
             ListenableFuture<T> currentTry0 = currentTry;
             if (retryInterval > 0) {
-                // 需要等一会儿再重试的话，挂一个重试任务
+                // 需要等一会儿再重试的话，挂一个等待任务
                 currentTry0 = catchingAsync(currentTry0, RetryIntervalSignal.class,
                         x -> scheduler.schedule(() -> {
                             throw new RetryIntervalSignal();
                         }, retryInterval, TimeUnit.MILLISECONDS));
             }
-
+            // 挂上重试任务
             catchingAsync(currentTry0, Throwable.class, x -> callWithRetry(func, singleCallTimeout,
                     retryTime - 1, retryInterval, resultFuture0));
         }
