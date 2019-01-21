@@ -124,6 +124,7 @@ public class ScopeAsyncRetry {
      * @param func 需要重试的调用
      * @return 带重试的future
      */
+    @Nonnull
     public <T, X extends Throwable> ListenableFuture<T> retry(long singleCallTimeout,
             RetryPolicy retryPolicy, @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func) {
         // 用来保存最终的结果
