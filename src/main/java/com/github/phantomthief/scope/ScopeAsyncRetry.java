@@ -26,6 +26,39 @@ import com.google.common.util.concurrent.SettableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
+ * 支持 {@link Scope} 级联，并且支持单次调用独立设置超时的异步重试封装
+ *
+ * 使用方法:
+ * <pre>{@code
+ *
+ * class MyClass {
+ *
+ *   private final ScopeAsyncRetry retrier = ScopeAsyncRetry.shared();
+ *   private final ListeningExecutorService executor = listeningDecorator(newFixedThreadPool(10);
+ *
+ *   ListenableFuture&lt;String&gt; asyncCall() {
+ *     return executor.submit(() -> {
+ *       sleepUninterruptibly(ThreadLocalRandom.current().nextLong(150L), MILLISECONDS);
+ *       return "myTest"
+ *     });
+ *   }
+ *
+ *   void foo() throws ExecutionException, TimeoutException {
+ *     ListenableFuture&lt;String&gt; future = retrier.retry(100, retryNTimes(3), () -> asyncCall());
+ *     String unwrapped = getUninterruptibly(future, 200, MILLISECONDS);
+ *     System.out.println("result is:" + unwrapped);
+ *   }
+ * }
+ *
+ * }
+ * </pre>
+ *
+ * 注意: 如果最终外部的ListenableFuture.get(timeout)没有超时，但是内部请求都失败了，则上抛
+ * 会上抛 {@link ExecutionException} 并包含最后一次重试的结果
+ * 特别的，如果最后一次请求超时 {@link ExecutionException#getCause()} 为 {@link TimeoutException}
+ *
+ * 注意: 需要重试的方法应该是幂等的操作，不应有任何副作用。
+ *
  * @author myco
  * Created on 2019-01-20
  */
