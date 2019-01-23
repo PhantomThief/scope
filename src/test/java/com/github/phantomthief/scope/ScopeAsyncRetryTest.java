@@ -51,7 +51,7 @@ class ScopeAsyncRetryTest {
         beginScope();
         initKey();
         for (int i = 0; i < 10; i++) {
-            ListenableFuture<String> future = retrier.retry(100, retryNTimes(3, 10),
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10),
                     () -> successAfter("test", 200));
             assertThrows(TimeoutException.class,
                     () -> assertTimeout(ofMillis(60), () -> future.get(50, MILLISECONDS)));
@@ -64,7 +64,7 @@ class ScopeAsyncRetryTest {
         beginScope();
         initKey();
         for (int i = 0; i < 10; i++) {
-            ListenableFuture<String> future = retrier.retry(100, retryNTimes(3, 10),
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10),
                     sleepySuccess(new long[] { 300L, 200L, 50L }));
             assertEquals("2", future.get(350, MILLISECONDS));
         }
@@ -77,7 +77,7 @@ class ScopeAsyncRetryTest {
         initKey();
         for (int i = 0; i < 10; i++) {
             MySupplier1 func = sleepySuccess(new long[] { 300L, 200L, 50L });
-            ListenableFuture<String> future = retrier.retry(100, retryNTimes(3, 10), func);
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10), func);
             assertThrows(TimeoutException.class, () -> future.get(50, MILLISECONDS));
             assertEquals(1, func.current);
         }
@@ -89,7 +89,7 @@ class ScopeAsyncRetryTest {
         beginScope();
         initKey();
         for (int i = 0; i < 10; i++) {
-            ListenableFuture<Object> future = retrier.retry(100, retryNTimes(3, 10), () -> {
+            ListenableFuture<Object> future = retrier.callWithRetry(100, retryNTimes(3, 10), () -> {
                 assertContext();
                 return executor.submit(() -> {
                     sleepUninterruptibly(500, MILLISECONDS);
@@ -100,7 +100,7 @@ class ScopeAsyncRetryTest {
         }
 
         for (int i = 0; i < 10; i++) {
-            ListenableFuture<Object> future2 = retrier.retry(100, retryNTimes(3, 10), () -> {
+            ListenableFuture<Object> future2 = retrier.callWithRetry(100, retryNTimes(3, 10), () -> {
                 assertContext();
                 return executor.submit(() -> {
                     sleepUninterruptibly(50, MILLISECONDS);
@@ -113,7 +113,7 @@ class ScopeAsyncRetryTest {
         }
 
         for (int i = 0; i < 10; i++) {
-            ListenableFuture<Object> future3 = retrier.retry(20, retryNTimes(3, 10), () -> {
+            ListenableFuture<Object> future3 = retrier.callWithRetry(20, retryNTimes(3, 10), () -> {
                 assertContext();
                 return executor.submit(() -> {
                     sleepUninterruptibly(100, MILLISECONDS);
@@ -126,7 +126,7 @@ class ScopeAsyncRetryTest {
         }
 
         for (int i = 0; i < 10; i++) {
-            ListenableFuture<Object> future4 = retrier.retry(20, retryNTimes(3, 10), () -> {
+            ListenableFuture<Object> future4 = retrier.callWithRetry(20, retryNTimes(3, 10), () -> {
                 assertContext();
                 throw new IllegalArgumentException("test");
             });
@@ -153,7 +153,7 @@ class ScopeAsyncRetryTest {
 
         AtomicInteger calledTimes = new AtomicInteger(0);
 
-        ListenableFuture<String> future = retrier.retry(200, retryNTimes(3, 10, false),
+        ListenableFuture<String> future = retrier.callWithRetry(200, retryNTimes(3, 10, false),
                 () -> executor.submit(() -> {
                     int id = calledTimes.incrementAndGet();
                     delaySomeTime();
@@ -180,7 +180,7 @@ class ScopeAsyncRetryTest {
 
         AtomicInteger calledTimes = new AtomicInteger(0);
 
-        ListenableFuture<String> future = retrier.retry(200, retryNTimes(3, 10, true),
+        ListenableFuture<String> future = retrier.callWithRetry(200, retryNTimes(3, 10, true),
                 () -> executor.submit(() -> {
                     int id = calledTimes.incrementAndGet();
                     delaySomeTime();

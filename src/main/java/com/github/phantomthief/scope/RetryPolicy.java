@@ -12,6 +12,10 @@ public interface RetryPolicy {
 
     long NO_RETRY = -1L;
 
+    static RetryPolicy noRetry() {
+        return retryNTimes(0);
+    }
+
     static RetryPolicy retryNTimes(int times) {
         return retryNTimes(times, 0);
     }
