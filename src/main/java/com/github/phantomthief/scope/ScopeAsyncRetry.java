@@ -3,7 +3,6 @@ package com.github.phantomthief.scope;
 import static com.github.phantomthief.scope.Scope.getCurrentScope;
 import static com.github.phantomthief.scope.Scope.supplyWithExistScope;
 import static com.google.common.util.concurrent.Futures.addCallback;
-import static com.google.common.util.concurrent.Futures.catchingAsync;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
@@ -54,8 +53,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * </pre>
  *
  * 注意: 如果最终外部的ListenableFuture.get(timeout)没有超时，但是内部请求都失败了，则上抛
- * 会上抛 {@link ExecutionException} 并包含最后一次重试的结果
- * 特别的，如果最后一次请求超时 {@link ExecutionException#getCause()} 为 {@link TimeoutException}
+ * 会上抛 {@link java.util.concurrent.ExecutionException} 并包含最后一次重试的结果
+ * 特别的，如果最后一次请求超时 {@link java.util.concurrent.ExecutionException#getCause()} 为 {@link TimeoutException}
  *
  * 注意: 需要重试的方法应该是幂等的操作，不应有任何副作用。
  *
@@ -219,31 +218,34 @@ public class ScopeAsyncRetry {
             addCallback(currentTry, setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
-        // 为了用lambda ...
-        SettableFuture<T> resultFuture0 = resultFuture;
         // hedge模式下，resultFuture可能被之前的调用成功set值，所里这里不仅检查是否需要重试，也检查下是否已经取到了最终结果
         if (!resultFuture.isDone() && retryConfig.retryInterval >= 0) {
-            // SettableFuture类型不好处理，后边也用不到set了
-            ListenableFuture<T> currentTry0 = currentTry;
-            if (retryConfig.retryInterval > 0) {
-                // 这里的等待以及失败重试是通过catchingAsync来做的，只有future抛出异常才会触发后边的callback
-                // 等待逻辑是借助scheduler返回一个到时间抛出异常的future来做的
+            // 没拿到最终结果，且重试次数还没用完，那我们接着加重试callback
+            addCallback(currentTry, new FutureCallback<T>() {
 
-                // 需要等一会儿再重试的话，挂一个等待任务
-                currentTry0 = catchingAsync(currentTry0, Throwable.class,
-                        x -> scheduler.schedule(() -> {
-                            throw new RetryIntervalSignal();
-                        }, retryConfig.retryInterval, MILLISECONDS));
-            }
-            // 挂上重试任务
-            catchingAsync(currentTry0, Throwable.class, x -> callWithRetry(func, singleCallTimeoutMs,
-                    retryConfigSupplier, resultFuture0));
+                @Override
+                public void onSuccess(@Nullable T result) {
+                    // 只有失败了才需要再进行重试，所以这里就啥也不干了
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                    // 不管之前是超时还是执行失败了，只要最终结果没拿到，且重试次数还没用完，就会到这里来
+                    if (retryConfig.retryInterval > 0) {
+                        // 延迟一会儿再重试
+                        scheduler.schedule(() -> {
+                            callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier,
+                                    resultFuture);
+                        }, retryConfig.retryInterval, MILLISECONDS);
+                    } else {
+                        // 直接重试
+                        callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture);
+                    }
+                }
+            });
         }
 
         return resultFuture;
-    }
-
-    private static class RetryIntervalSignal extends TimeoutException {
     }
 
     private static final class LazyHolder {
