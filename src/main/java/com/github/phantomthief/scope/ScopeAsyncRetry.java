@@ -197,8 +197,10 @@ public class ScopeAsyncRetry {
             scheduler.schedule(() -> {
                 currentTry.setException(new TimeoutException());
                 if (!retryConfig.hedge) {
+                    // 普通模式下，这次重试超时就把这次的future cancel掉
                     currentTry.cancel(false);
                 } else {
+                    // hedge模式下，这次重试等到最终结果确定下来之后再cancel
                     addCallback(resultFuture, cancelOtherSettableFuture(currentTry, false));
                 }
             }, singleCallTimeoutMs, MILLISECONDS);
