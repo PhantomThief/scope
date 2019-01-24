@@ -3,6 +3,7 @@ package com.github.phantomthief.scope;
 import static com.github.phantomthief.scope.Scope.getCurrentScope;
 import static com.github.phantomthief.scope.Scope.supplyWithExistScope;
 import static com.google.common.util.concurrent.Futures.addCallback;
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
@@ -137,6 +138,11 @@ public class ScopeAsyncRetry {
         };
     }
 
+    private static <T> void addCallbackWithDirectExecutor(ListenableFuture<T> future,
+            FutureCallback<? super T> callback) {
+        addCallback(future, callback, directExecutor());
+    }
+
     private static class RetryConfig {
 
         private final long retryInterval;
@@ -187,7 +193,8 @@ public class ScopeAsyncRetry {
         ListenableFuture<T> callingFuture = null;
         try {
             callingFuture = func.get();
-            addCallback(callingFuture, setAllResultToOtherSettableFuture(currentTry));
+            addCallbackWithDirectExecutor(callingFuture,
+                    setAllResultToOtherSettableFuture(currentTry));
         } catch (Throwable t) {
             currentTry.setException(t);
         }
@@ -200,28 +207,32 @@ public class ScopeAsyncRetry {
                     currentTry.cancel(false);
                 } else {
                     // hedge模式下，这次重试等到最终结果确定下来之后再cancel
-                    addCallback(resultFuture, cancelOtherSettableFuture(currentTry, false));
+                    addCallbackWithDirectExecutor(resultFuture,
+                            cancelOtherSettableFuture(currentTry, false));
                 }
             }, singleCallTimeoutMs, MILLISECONDS);
         }
 
         if (retryConfig.hedge && callingFuture != null) {
             // hedge模式下，不cancel之前的尝试，之前的调用一旦成功就set到最终结果里
-            addCallback(callingFuture, setSuccessResultToOtherSettableFuture(resultFuture));
+            addCallbackWithDirectExecutor(callingFuture,
+                    setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
         if (retryConfig.retryInterval < 0) {
             // 如果不会再重试了，那就不管什么结果都set到最终结果里吧
-            addCallback(currentTry, setAllResultToOtherSettableFuture(resultFuture));
+            addCallbackWithDirectExecutor(currentTry,
+                    setAllResultToOtherSettableFuture(resultFuture));
         } else {
             // 本次尝试如果成功，直接给最终结果set上；超时或者异常的话，后边的重试操作都挂在catching里
-            addCallback(currentTry, setSuccessResultToOtherSettableFuture(resultFuture));
+            addCallbackWithDirectExecutor(currentTry,
+                    setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
         // hedge模式下，resultFuture可能被之前的调用成功set值，所里这里不仅检查是否需要重试，也检查下是否已经取到了最终结果
         if (!resultFuture.isDone() && retryConfig.retryInterval >= 0) {
             // 没拿到最终结果，且重试次数还没用完，那我们接着加重试callback
-            addCallback(currentTry, new FutureCallback<T>() {
+            addCallbackWithDirectExecutor(currentTry, new FutureCallback<T>() {
 
                 @Override
                 public void onSuccess(@Nullable T result) {
