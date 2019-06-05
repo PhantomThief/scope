@@ -5,13 +5,12 @@ import static com.github.phantomthief.scope.Scope.supplyWithExistScope;
 import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
-import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,7 +23,6 @@ import javax.annotation.Nullable;
 import com.github.phantomthief.util.ThrowableSupplier;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -69,13 +67,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 public class ScopeAsyncRetry {
 
     private final ListeningScheduledExecutorService scheduler;
-    private final ListeningExecutorService callbackExecutor;
+    private final Executor callbackExecutor;
 
     /**
      * 新建一个 ScopeAsyncRetry 实例
      */
-    public static ScopeAsyncRetry
-            createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
+    public static ScopeAsyncRetry createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
         return new ScopeAsyncRetry(executor);
     }
 
@@ -90,19 +87,18 @@ public class ScopeAsyncRetry {
     }
 
     ScopeAsyncRetry(ScheduledExecutorService scheduler) {
-        this(scheduler, newDirectExecutorService());
+        this(scheduler, directExecutor());
     }
 
-    ScopeAsyncRetry(ScheduledExecutorService scheduler, ExecutorService callbackExecutor) {
+    ScopeAsyncRetry(ScheduledExecutorService scheduler, Executor callbackExecutor) {
         this.scheduler = listeningDecorator(scheduler);
-        this.callbackExecutor = listeningDecorator(callbackExecutor);
+        this.callbackExecutor = callbackExecutor;
     }
 
     /**
      * 内部工具方法，将future结果代理到另一个SettableFuture上
      */
-    private static <T> FutureCallback<T>
-            setAllResultToOtherSettableFuture(SettableFuture<T> target) {
+    private static <T> FutureCallback<T> setAllResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
@@ -133,8 +129,7 @@ public class ScopeAsyncRetry {
         };
     }
 
-    private static <T> FutureCallback<T>
-            setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
+    private static <T> FutureCallback<T> setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
