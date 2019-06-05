@@ -73,8 +73,7 @@ public class ScopeAsyncRetry {
     /**
      * 新建一个 ScopeAsyncRetry 实例
      */
-    public static ScopeAsyncRetry
-    createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
+    public static ScopeAsyncRetry createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
         return new ScopeAsyncRetry(executor);
     }
 
