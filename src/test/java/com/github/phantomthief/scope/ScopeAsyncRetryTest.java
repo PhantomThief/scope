@@ -10,6 +10,7 @@ import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterrup
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -68,7 +69,7 @@ class ScopeAsyncRetryTest {
         initKey();
         for (int i = 0; i < 10; i++) {
             ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10),
-                    sleepySuccess(new long[] { 300L, 200L, 50L }));
+                    sleepySuccess(new long[] {300L, 200L, 50L}));
             assertEquals("2", future.get(350, MILLISECONDS));
         }
         endScope();
@@ -79,7 +80,7 @@ class ScopeAsyncRetryTest {
         beginScope();
         initKey();
         for (int i = 0; i < 10; i++) {
-            MySupplier1 func = sleepySuccess(new long[] { 300L, 200L, 50L });
+            MySupplier1 func = sleepySuccess(new long[] {300L, 200L, 50L});
             ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10), func);
             assertThrows(TimeoutException.class, () -> future.get(50, MILLISECONDS));
             assertEquals(1, func.current);
@@ -141,7 +142,7 @@ class ScopeAsyncRetryTest {
     }
 
     private static AtomicInteger idx = new AtomicInteger(0);
-    private static final long[] delayTimeArray = { 300, 900, 500, 900 };
+    private static final long[] delayTimeArray = {300, 900, 500, 900};
 
     private static void delaySomeTime() {
         sleepUninterruptibly(delayTimeArray[idx.getAndIncrement()],
@@ -216,7 +217,7 @@ class ScopeAsyncRetryTest {
     }
 
     private class MySupplier1 implements
-                              ThrowableSupplier<ListenableFuture<String>, RuntimeException> {
+            ThrowableSupplier<ListenableFuture<String>, RuntimeException> {
 
         private final long[] sleepArray;
         private int current;
@@ -290,5 +291,12 @@ class ScopeAsyncRetryTest {
         sleepUninterruptibly(1, SECONDS);
         assertEquals(10, succNum.get());
         assertEquals(20, failedNum.get());
+    }
+
+    @Test
+    void testGetFuture() {
+        beginScope();
+        initKey();
+        assertThrows(TimeoutException.class, () -> successAfter("test", 200).get(0, NANOSECONDS));
     }
 }

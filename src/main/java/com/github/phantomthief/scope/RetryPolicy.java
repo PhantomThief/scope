@@ -53,4 +53,8 @@ public interface RetryPolicy {
     default boolean hedge() {
         return true;
     }
+
+    default boolean triggerGetOnTimeout() {
+        return true;
+    }
 }

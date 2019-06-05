@@ -9,6 +9,7 @@ import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorS
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -156,10 +157,12 @@ public class ScopeAsyncRetry {
 
         private final long retryInterval;
         private final boolean hedge;
+        private final boolean triggerGetOnTimeout;
 
-        private RetryConfig(long retryInterval, boolean hedge) {
+        private RetryConfig(long retryInterval, boolean hedge, boolean triggerGetOnTimeout) {
             this.retryInterval = retryInterval;
             this.hedge = hedge;
+            this.triggerGetOnTimeout = triggerGetOnTimeout;
         }
     }
 
@@ -185,7 +188,7 @@ public class ScopeAsyncRetry {
 
         AtomicInteger retryTime = new AtomicInteger(0);
         Supplier<RetryConfig> retryConfigSupplier = () -> new RetryConfig(
-                retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge());
+                retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge(), retryPolicy.triggerGetOnTimeout());
 
         Scope scope = getCurrentScope();
         ThrowableSupplier<ListenableFuture<T>, X> scopeWrappedFunc = () -> supplyWithExistScope(
@@ -210,18 +213,25 @@ public class ScopeAsyncRetry {
         if (eachRetryCallback != null) {
             addCallback(currentTry, eachRetryCallback, callbackExecutor);
         }
-        ListenableFuture<T> callingFuture = null;
+        RefHolder<ListenableFuture<T>> callingFuture = new RefHolder<>();
         try {
-            callingFuture = func.get();
-            addCallbackWithDirectExecutor(callingFuture,
+            callingFuture.set(func.get());
+            addCallbackWithDirectExecutor(callingFuture.get(),
                     setAllResultToOtherSettableFuture(currentTry));
         } catch (Throwable t) {
             currentTry.setException(t);
         }
-        if (callingFuture != null) {
+        if (callingFuture.get() != null) {
             // 看是先超时还是先执行完成或者执行抛异常
             scheduler.schedule(() -> {
                 currentTry.setException(new TimeoutException());
+                if (retryConfig.triggerGetOnTimeout) {
+                    try {
+                        callingFuture.get().get(0, NANOSECONDS);
+                    } catch (Throwable t) {
+                        // ignore
+                    }
+                }
                 if (!retryConfig.hedge) {
                     // 普通模式下，这次重试超时就把这次的future cancel掉
                     currentTry.cancel(false);
@@ -233,9 +243,9 @@ public class ScopeAsyncRetry {
             }, singleCallTimeoutMs, MILLISECONDS);
         }
 
-        if (retryConfig.hedge && callingFuture != null) {
+        if (retryConfig.hedge && callingFuture.get() != null) {
             // hedge模式下，不cancel之前的尝试，之前的调用一旦成功就set到最终结果里
-            addCallbackWithDirectExecutor(callingFuture,
+            addCallbackWithDirectExecutor(callingFuture.get(),
                     setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
@@ -277,6 +287,18 @@ public class ScopeAsyncRetry {
         }
 
         return resultFuture;
+    }
+
+    private static class RefHolder<R> {
+        private R r;
+
+        public void set(R ref) {
+            this.r = ref;
+        }
+
+        public R get() {
+            return r;
+        }
     }
 
     private static final class LazyHolder {
