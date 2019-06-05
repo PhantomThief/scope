@@ -5,10 +5,12 @@ import static com.github.phantomthief.scope.Scope.supplyWithExistScope;
 import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
+import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,13 +23,14 @@ import javax.annotation.Nullable;
 import com.github.phantomthief.util.ThrowableSupplier;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * 支持 {@link Scope} 级联，并且支持单次调用独立设置超时的异步重试封装
- *
+ * <p>
  * 使用方法:
  * <pre>{@code
  *
@@ -52,11 +55,11 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  *
  * }
  * </pre>
- *
+ * <p>
  * 注意: 如果最终外部的ListenableFuture.get(timeout)没有超时，但是内部请求都失败了，则上抛
  * 会上抛 {@link java.util.concurrent.ExecutionException} 并包含最后一次重试的结果
  * 特别的，如果最后一次请求超时 {@link java.util.concurrent.ExecutionException#getCause()} 为 {@link TimeoutException}
- *
+ * <p>
  * 注意: 需要重试的方法应该是幂等的操作，不应有任何副作用。
  *
  * @author myco
@@ -65,18 +68,19 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 public class ScopeAsyncRetry {
 
     private final ListeningScheduledExecutorService scheduler;
+    private final ListeningExecutorService callbackExecutor;
 
     /**
      * 新建一个 ScopeAsyncRetry 实例
      */
     public static ScopeAsyncRetry
-            createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
+    createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
         return new ScopeAsyncRetry(executor);
     }
 
     /**
      * 共享的 ScopeAsyncRetry 实例
-     *
+     * <p>
      * 建议不同业务使用不同的实例，因为其中通过 ScheduledExecutorService 来检测超时 & 实现间隔重试
      * 大量使用共享实例，这里可能成为瓶颈
      */
@@ -85,14 +89,19 @@ public class ScopeAsyncRetry {
     }
 
     private ScopeAsyncRetry(ScheduledExecutorService scheduler) {
+        this(scheduler, newDirectExecutorService());
+    }
+
+    private ScopeAsyncRetry(ScheduledExecutorService scheduler, ExecutorService callbackExecutor) {
         this.scheduler = listeningDecorator(scheduler);
+        this.callbackExecutor = listeningDecorator(callbackExecutor);
     }
 
     /**
      * 内部工具方法，将future结果代理到另一个SettableFuture上
      */
     private static <T> FutureCallback<T>
-            setAllResultToOtherSettableFuture(SettableFuture<T> target) {
+    setAllResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
@@ -124,7 +133,7 @@ public class ScopeAsyncRetry {
     }
 
     private static <T> FutureCallback<T>
-            setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
+    setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
@@ -164,6 +173,13 @@ public class ScopeAsyncRetry {
     @Nonnull
     public <T, X extends Throwable> ListenableFuture<T> callWithRetry(long singleCallTimeoutMs,
             RetryPolicy retryPolicy, @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func) {
+        return callWithRetry(singleCallTimeoutMs, retryPolicy, func, null);
+    }
+
+    @Nonnull
+    public <T, X extends Throwable> ListenableFuture<T> callWithRetry(long singleCallTimeoutMs,
+            RetryPolicy retryPolicy, @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func,
+            FutureCallback<T> eachRetryCallback) {
         // 用来保存最终的结果
         SettableFuture<T> resultFuture = SettableFuture.create();
 
@@ -176,7 +192,7 @@ public class ScopeAsyncRetry {
                 scope, func);
 
         return callWithRetry(scopeWrappedFunc, singleCallTimeoutMs, retryConfigSupplier,
-                resultFuture);
+                resultFuture, eachRetryCallback);
     }
 
     /**
@@ -184,12 +200,16 @@ public class ScopeAsyncRetry {
      */
     private <T, X extends Throwable> SettableFuture<T> callWithRetry(
             @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func, long singleCallTimeoutMs,
-            Supplier<RetryConfig> retryConfigSupplier, SettableFuture<T> resultFuture) {
+            Supplier<RetryConfig> retryConfigSupplier, SettableFuture<T> resultFuture,
+            FutureCallback<T> eachRetryCallback) {
 
         RetryConfig retryConfig = retryConfigSupplier.get();
 
         // 开始当前一次调用尝试
         final SettableFuture<T> currentTry = SettableFuture.create();
+        if (eachRetryCallback != null) {
+            addCallback(currentTry, eachRetryCallback, callbackExecutor);
+        }
         ListenableFuture<T> callingFuture = null;
         try {
             callingFuture = func.get();
@@ -246,11 +266,11 @@ public class ScopeAsyncRetry {
                         // 延迟一会儿再重试
                         scheduler.schedule(() -> {
                             callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier,
-                                    resultFuture);
+                                    resultFuture, eachRetryCallback);
                         }, retryConfig.retryInterval, MILLISECONDS);
                     } else {
                         // 直接重试
-                        callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture);
+                        callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture, eachRetryCallback);
                     }
                 }
             });

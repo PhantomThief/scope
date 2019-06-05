@@ -10,6 +10,7 @@ import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterrup
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -21,12 +22,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.annotation.Nullable;
+
 import org.junit.jupiter.api.Test;
 
 import com.github.phantomthief.util.ThrowableSupplier;
+import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
-import com.google.common.util.concurrent.Uninterruptibles;
 
 /**
  * @author w.vela
@@ -65,7 +68,7 @@ class ScopeAsyncRetryTest {
         initKey();
         for (int i = 0; i < 10; i++) {
             ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10),
-                    sleepySuccess(new long[] { 300L, 200L, 50L }));
+                    sleepySuccess(new long[] {300L, 200L, 50L}));
             assertEquals("2", future.get(350, MILLISECONDS));
         }
         endScope();
@@ -76,7 +79,7 @@ class ScopeAsyncRetryTest {
         beginScope();
         initKey();
         for (int i = 0; i < 10; i++) {
-            MySupplier1 func = sleepySuccess(new long[] { 300L, 200L, 50L });
+            MySupplier1 func = sleepySuccess(new long[] {300L, 200L, 50L});
             ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10), func);
             assertThrows(TimeoutException.class, () -> future.get(50, MILLISECONDS));
             assertEquals(1, func.current);
@@ -138,10 +141,10 @@ class ScopeAsyncRetryTest {
     }
 
     private static AtomicInteger idx = new AtomicInteger(0);
-    private static final long[] delayTimeArray = { 300, 900, 500, 900 };
+    private static final long[] delayTimeArray = {300, 900, 500, 900};
 
     private static void delaySomeTime() {
-        Uninterruptibles.sleepUninterruptibly(delayTimeArray[idx.getAndIncrement()],
+        sleepUninterruptibly(delayTimeArray[idx.getAndIncrement()],
                 TimeUnit.MILLISECONDS);
     }
 
@@ -213,7 +216,7 @@ class ScopeAsyncRetryTest {
     }
 
     private class MySupplier1 implements
-                              ThrowableSupplier<ListenableFuture<String>, RuntimeException> {
+            ThrowableSupplier<ListenableFuture<String>, RuntimeException> {
 
         private final long[] sleepArray;
         private int current;
@@ -232,5 +235,60 @@ class ScopeAsyncRetryTest {
                 return index + "";
             });
         }
+    }
+
+    @Test
+    void testAllTimeoutWithEachListener() {
+        beginScope();
+        initKey();
+        AtomicInteger succNum = new AtomicInteger(0);
+        AtomicInteger failedNum = new AtomicInteger(0);
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10),
+                    () -> successAfter("test", 200), new FutureCallback<String>() {
+                        @Override
+                        public void onSuccess(@Nullable String result) {
+                            succNum.incrementAndGet();
+                        }
+
+                        @Override
+                        public void onFailure(Throwable t) {
+                            failedNum.incrementAndGet();
+                        }
+                    });
+            assertThrows(TimeoutException.class,
+                    () -> assertTimeout(ofMillis(60), () -> future.get(50, MILLISECONDS)));
+        }
+        endScope();
+        sleepUninterruptibly(1, SECONDS);
+        assertEquals(0, succNum.get());
+        assertEquals(30, failedNum.get());
+    }
+
+    @Test
+    void testWithEachListener() throws InterruptedException, ExecutionException, TimeoutException {
+        beginScope();
+        initKey();
+        AtomicInteger succNum = new AtomicInteger(0);
+        AtomicInteger failedNum = new AtomicInteger(0);
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(4, 10),
+                    sleepySuccess(new long[] {300L, 200L, 50L, 100L}), new FutureCallback<String>() {
+                        @Override
+                        public void onSuccess(@Nullable String result) {
+                            succNum.incrementAndGet();
+                        }
+
+                        @Override
+                        public void onFailure(Throwable t) {
+                            failedNum.incrementAndGet();
+                        }
+                    });
+            assertEquals("2", future.get(350, MILLISECONDS));
+        }
+        endScope();
+        sleepUninterruptibly(1, SECONDS);
+        assertEquals(10, succNum.get());
+        assertEquals(20, failedNum.get());
     }
 }
