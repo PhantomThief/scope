@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +30,7 @@ import org.junit.jupiter.api.Test;
 
 import com.github.phantomthief.util.ThrowableSupplier;
 import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 
@@ -48,6 +50,47 @@ class ScopeAsyncRetryTest {
 
     private void assertContext() {
         assertEquals("test", context.get());
+    }
+
+    @Test
+    void testTimeout() throws Throwable {
+        beginScope();
+        initKey();
+        ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10, false),
+                () -> successAfter("test", 200));
+        try {
+            future.get();
+        } catch (Throwable t) {
+            assertTrue(t instanceof ExecutionException);
+            assertTrue(t.getCause() instanceof TimeoutException);
+        }
+        endScope();
+    }
+
+    @Test
+    void testTimeout2() throws Throwable {
+        beginScope();
+        initKey();
+        ListenableFuture<String> future = retrier.callWithRetry(10, retryNTimes(3, 10),
+                () -> successAfter("test", 100));
+        Futures.addCallback(future, new FutureCallback<String>() {
+            @Override
+            public void onSuccess(@Nullable String result) {
+                System.out.println(result);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                t.printStackTrace();
+            }
+        });
+        try {
+            future.get();
+        } catch (Throwable t) {
+            assertTrue(t instanceof ExecutionException);
+            assertTrue(t.getCause() instanceof TimeoutException);
+        }
+        endScope();
     }
 
     @Test
@@ -298,5 +341,6 @@ class ScopeAsyncRetryTest {
         beginScope();
         initKey();
         assertThrows(TimeoutException.class, () -> successAfter("test", 200).get(0, NANOSECONDS));
+        endScope();
     }
 }

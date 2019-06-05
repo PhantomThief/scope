@@ -89,11 +89,11 @@ public class ScopeAsyncRetry {
         return LazyHolder.INSTANCE;
     }
 
-    private ScopeAsyncRetry(ScheduledExecutorService scheduler) {
+    ScopeAsyncRetry(ScheduledExecutorService scheduler) {
         this(scheduler, newDirectExecutorService());
     }
 
-    private ScopeAsyncRetry(ScheduledExecutorService scheduler, ExecutorService callbackExecutor) {
+    ScopeAsyncRetry(ScheduledExecutorService scheduler, ExecutorService callbackExecutor) {
         this.scheduler = listeningDecorator(scheduler);
         this.callbackExecutor = listeningDecorator(callbackExecutor);
     }
