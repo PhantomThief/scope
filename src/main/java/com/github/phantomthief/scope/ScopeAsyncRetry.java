@@ -8,7 +8,9 @@ import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,7 +29,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * 支持 {@link Scope} 级联，并且支持单次调用独立设置超时的异步重试封装
- *
+ * <p>
  * 使用方法:
  * <pre>{@code
  *
@@ -52,11 +54,11 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  *
  * }
  * </pre>
- *
+ * <p>
  * 注意: 如果最终外部的ListenableFuture.get(timeout)没有超时，但是内部请求都失败了，则上抛
  * 会上抛 {@link java.util.concurrent.ExecutionException} 并包含最后一次重试的结果
  * 特别的，如果最后一次请求超时 {@link java.util.concurrent.ExecutionException#getCause()} 为 {@link TimeoutException}
- *
+ * <p>
  * 注意: 需要重试的方法应该是幂等的操作，不应有任何副作用。
  *
  * @author myco
@@ -65,18 +67,18 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 public class ScopeAsyncRetry {
 
     private final ListeningScheduledExecutorService scheduler;
+    private final Executor callbackExecutor;
 
     /**
      * 新建一个 ScopeAsyncRetry 实例
      */
-    public static ScopeAsyncRetry
-            createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
+    public static ScopeAsyncRetry createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
         return new ScopeAsyncRetry(executor);
     }
 
     /**
      * 共享的 ScopeAsyncRetry 实例
-     *
+     * <p>
      * 建议不同业务使用不同的实例，因为其中通过 ScheduledExecutorService 来检测超时 & 实现间隔重试
      * 大量使用共享实例，这里可能成为瓶颈
      */
@@ -84,15 +86,19 @@ public class ScopeAsyncRetry {
         return LazyHolder.INSTANCE;
     }
 
-    private ScopeAsyncRetry(ScheduledExecutorService scheduler) {
+    ScopeAsyncRetry(ScheduledExecutorService scheduler) {
+        this(scheduler, directExecutor());
+    }
+
+    ScopeAsyncRetry(ScheduledExecutorService scheduler, Executor callbackExecutor) {
         this.scheduler = listeningDecorator(scheduler);
+        this.callbackExecutor = callbackExecutor;
     }
 
     /**
      * 内部工具方法，将future结果代理到另一个SettableFuture上
      */
-    private static <T> FutureCallback<T>
-            setAllResultToOtherSettableFuture(SettableFuture<T> target) {
+    private static <T> FutureCallback<T> setAllResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
@@ -123,8 +129,7 @@ public class ScopeAsyncRetry {
         };
     }
 
-    private static <T> FutureCallback<T>
-            setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
+    private static <T> FutureCallback<T> setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
@@ -147,10 +152,12 @@ public class ScopeAsyncRetry {
 
         private final long retryInterval;
         private final boolean hedge;
+        private final boolean triggerGetOnTimeout;
 
-        private RetryConfig(long retryInterval, boolean hedge) {
+        private RetryConfig(long retryInterval, boolean hedge, boolean triggerGetOnTimeout) {
             this.retryInterval = retryInterval;
             this.hedge = hedge;
+            this.triggerGetOnTimeout = triggerGetOnTimeout;
         }
     }
 
@@ -164,19 +171,26 @@ public class ScopeAsyncRetry {
     @Nonnull
     public <T, X extends Throwable> ListenableFuture<T> callWithRetry(long singleCallTimeoutMs,
             RetryPolicy retryPolicy, @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func) {
+        return callWithRetry(singleCallTimeoutMs, retryPolicy, func, null);
+    }
+
+    @Nonnull
+    public <T, X extends Throwable> ListenableFuture<T> callWithRetry(long singleCallTimeoutMs,
+            RetryPolicy retryPolicy, @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func,
+            FutureCallback<T> eachRetryCallback) {
         // 用来保存最终的结果
         SettableFuture<T> resultFuture = SettableFuture.create();
 
         AtomicInteger retryTime = new AtomicInteger(0);
         Supplier<RetryConfig> retryConfigSupplier = () -> new RetryConfig(
-                retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge());
+                retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge(), retryPolicy.triggerGetOnTimeout());
 
         Scope scope = getCurrentScope();
         ThrowableSupplier<ListenableFuture<T>, X> scopeWrappedFunc = () -> supplyWithExistScope(
                 scope, func);
 
         return callWithRetry(scopeWrappedFunc, singleCallTimeoutMs, retryConfigSupplier,
-                resultFuture);
+                resultFuture, eachRetryCallback);
     }
 
     /**
@@ -184,24 +198,35 @@ public class ScopeAsyncRetry {
      */
     private <T, X extends Throwable> SettableFuture<T> callWithRetry(
             @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func, long singleCallTimeoutMs,
-            Supplier<RetryConfig> retryConfigSupplier, SettableFuture<T> resultFuture) {
+            Supplier<RetryConfig> retryConfigSupplier, SettableFuture<T> resultFuture,
+            FutureCallback<T> eachRetryCallback) {
 
         RetryConfig retryConfig = retryConfigSupplier.get();
 
         // 开始当前一次调用尝试
         final SettableFuture<T> currentTry = SettableFuture.create();
-        ListenableFuture<T> callingFuture = null;
+        if (eachRetryCallback != null) {
+            addCallback(currentTry, eachRetryCallback, callbackExecutor);
+        }
+        RefHolder<ListenableFuture<T>> callingFuture = new RefHolder<>();
         try {
-            callingFuture = func.get();
-            addCallbackWithDirectExecutor(callingFuture,
+            callingFuture.set(func.get());
+            addCallbackWithDirectExecutor(callingFuture.get(),
                     setAllResultToOtherSettableFuture(currentTry));
         } catch (Throwable t) {
             currentTry.setException(t);
         }
-        if (callingFuture != null) {
+        if (callingFuture.get() != null) {
             // 看是先超时还是先执行完成或者执行抛异常
             scheduler.schedule(() -> {
                 currentTry.setException(new TimeoutException());
+                if (retryConfig.triggerGetOnTimeout) {
+                    try {
+                        callingFuture.get().get(0, NANOSECONDS);
+                    } catch (Throwable t) {
+                        // ignore
+                    }
+                }
                 if (!retryConfig.hedge) {
                     // 普通模式下，这次重试超时就把这次的future cancel掉
                     currentTry.cancel(false);
@@ -213,9 +238,9 @@ public class ScopeAsyncRetry {
             }, singleCallTimeoutMs, MILLISECONDS);
         }
 
-        if (retryConfig.hedge && callingFuture != null) {
+        if (retryConfig.hedge && callingFuture.get() != null) {
             // hedge模式下，不cancel之前的尝试，之前的调用一旦成功就set到最终结果里
-            addCallbackWithDirectExecutor(callingFuture,
+            addCallbackWithDirectExecutor(callingFuture.get(),
                     setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
@@ -246,17 +271,29 @@ public class ScopeAsyncRetry {
                         // 延迟一会儿再重试
                         scheduler.schedule(() -> {
                             callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier,
-                                    resultFuture);
+                                    resultFuture, eachRetryCallback);
                         }, retryConfig.retryInterval, MILLISECONDS);
                     } else {
                         // 直接重试
-                        callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture);
+                        callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture, eachRetryCallback);
                     }
                 }
             });
         }
 
         return resultFuture;
+    }
+
+    private static class RefHolder<R> {
+        private R r;
+
+        public void set(R ref) {
+            this.r = ref;
+        }
+
+        public R get() {
+            return r;
+        }
     }
 
     private static final class LazyHolder {
