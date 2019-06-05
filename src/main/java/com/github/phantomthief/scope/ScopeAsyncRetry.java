@@ -73,7 +73,8 @@ public class ScopeAsyncRetry {
     /**
      * 新建一个 ScopeAsyncRetry 实例
      */
-    public static ScopeAsyncRetry createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
+    public static ScopeAsyncRetry
+            createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
         return new ScopeAsyncRetry(executor);
     }
 
@@ -99,7 +100,8 @@ public class ScopeAsyncRetry {
     /**
      * 内部工具方法，将future结果代理到另一个SettableFuture上
      */
-    private static <T> FutureCallback<T> setAllResultToOtherSettableFuture(SettableFuture<T> target) {
+    private static <T> FutureCallback<T>
+            setAllResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
@@ -130,7 +132,8 @@ public class ScopeAsyncRetry {
         };
     }
 
-    private static <T> FutureCallback<T> setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
+    private static <T> FutureCallback<T>
+            setSuccessResultToOtherSettableFuture(SettableFuture<T> target) {
         return new FutureCallback<T>() {
 
             @Override
