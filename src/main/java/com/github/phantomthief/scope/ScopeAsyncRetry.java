@@ -172,10 +172,10 @@ public class ScopeAsyncRetry {
                 retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge());
 
         Scope scope = getCurrentScope();
-        ThrowableSupplier<ListenableFuture<T>, X> scopeWarppedFunc = () -> supplyWithExistScope(
+        ThrowableSupplier<ListenableFuture<T>, X> scopeWrappedFunc = () -> supplyWithExistScope(
                 scope, func);
 
-        return callWithRetry(scopeWarppedFunc, singleCallTimeoutMs, retryConfigSupplier,
+        return callWithRetry(scopeWrappedFunc, singleCallTimeoutMs, retryConfigSupplier,
                 resultFuture);
     }
 
