@@ -14,6 +14,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,7 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nullable;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.github.phantomthief.util.ThrowableSupplier;
@@ -383,14 +383,7 @@ class ScopeAsyncRetryTest {
 
         @Override
         public T get() throws InterruptedException, ExecutionException {
-            try {
-                return originFuture.get();
-            } catch (Throwable t) {
-                if (t instanceof TimeoutException) {
-                    listener.run();
-                }
-                throw t;
-            }
+            return originFuture.get();
         }
 
         @Override
@@ -410,17 +403,17 @@ class ScopeAsyncRetryTest {
     void testTimeoutListenableFuture() throws Throwable {
         for (int i = 0; i < 10000; i++) {
             System.out.println(i);
-            AtomicBoolean timeouted = new AtomicBoolean(false);
+            AtomicBoolean timeout = new AtomicBoolean(false);
             TimeoutListenableFuture<String> future = new TimeoutListenableFuture<>(executor.submit(() -> {
                 sleepUninterruptibly(1, MILLISECONDS);
                 return "haha";
-            }), () -> timeouted.set(true));
+            }), () -> timeout.set(true));
             try {
                 future.get(0, NANOSECONDS);
             } catch (Throwable t) {
                 // ignore
             }
-            assertTrue(timeouted.get());
+            assertTrue(timeout.get());
         }
     }
 
@@ -441,15 +434,14 @@ class ScopeAsyncRetryTest {
                             latch.countDown();
                         })).get();
                 // 这里验证下没抛 TimeoutException 的时候一定没有调用 timeout listener
-                Assertions.assertEquals(expectResult, result);
-                Assertions.assertFalse(timeoutListenerTriggered.get());
+                assertEquals(expectResult, result);
+                assertFalse(timeoutListenerTriggered.get());
             } catch (Throwable t) {
                 if (Throwables.getRootCause(t) instanceof TimeoutException) {
                     System.out.println("timeout");
-                    //                    t.printStackTrace();
                     // 这里验证下抛 TimeoutException 的时候一定都调用了 timeout listener
                     latch.await();
-                    Assertions.assertTrue(timeoutListenerTriggered.get());
+                    assertTrue(timeoutListenerTriggered.get());
                 } else {
                     throw t;
                 }
