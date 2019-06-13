@@ -9,7 +9,6 @@ import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.Executors.newFixedThreadPool;
-import static java.util.concurrent.TimeUnit.MICROSECONDS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -417,7 +416,7 @@ class ScopeAsyncRetryTest {
     }
 
     @Test
-    void testCallerTimeoutListener() throws Throwable {
+    void testCallerTimeoutListener() throws InterruptedException, ExecutionException {
         String expectResult = "hahaha";
         for (int i = 0; i < 10000; i++) {
             System.out.println(i);
@@ -425,21 +424,25 @@ class ScopeAsyncRetryTest {
             try {
                 String result = retrier.callWithRetry(1, retryNTimes(0, 0, false),
                         () -> new TimeoutListenableFuture<>(executor.submit(() -> {
-                            sleepUninterruptibly(ThreadLocalRandom.current().nextInt(2000), MICROSECONDS);
+                            sleepUninterruptibly(ThreadLocalRandom.current().nextInt(2), MILLISECONDS);
                             return expectResult;
                         }), () -> {
                             timeoutListenerTriggered.set(true);
-                        })).get();
+                        })).get(ThreadLocalRandom.current().nextInt(3), MILLISECONDS);
                 // 这里验证下没抛 TimeoutException 的时候一定没有调用 timeout listener
                 assertEquals(expectResult, result);
                 assertFalse(timeoutListenerTriggered.get());
-            } catch (Throwable t) {
-                if (Throwables.getRootCause(t) instanceof TimeoutException) {
-                    System.out.println("timeout");
+                System.out.println("nothing.");
+            } catch (TimeoutException e) {
+                System.out.println("timeout by caller.");
+                assertTrue(timeoutListenerTriggered.get());
+            } catch (ExecutionException e) {
+                if (Throwables.getRootCause(e) instanceof TimeoutException) {
+                    System.out.println("timeout by retrier.");
                     // 这里验证下抛 TimeoutException 的时候一定都调用了 timeout listener
                     assertTrue(timeoutListenerTriggered.get());
                 } else {
-                    throw t;
+                    throw e;
                 }
             }
         }
