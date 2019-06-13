@@ -158,6 +158,11 @@ public class ScopeAsyncRetry {
         addCallback(future, callback, directExecutor());
     }
 
+    private <T> void addCallbackWithCallbackExecutor(ListenableFuture<T> future,
+            FutureCallback<? super T> callback) {
+        addCallback(future, callback, callbackExecutor);
+    }
+
     private static class RetryConfig {
 
         private final long retryInterval;
@@ -281,18 +286,18 @@ public class ScopeAsyncRetry {
 
         if (retryConfig.retryInterval < 0) {
             // 如果不会再重试了，那就不管什么结果都set到最终结果里吧
-            addCallbackWithDirectExecutor(currentTry,
+            addCallbackWithCallbackExecutor(currentTry,
                     setAllResultToOtherSettableFuture(resultFuture));
         } else {
             // 本次尝试如果成功，直接给最终结果set上；超时或者异常的话，后边的重试操作都挂在catching里
-            addCallbackWithDirectExecutor(currentTry,
+            addCallbackWithCallbackExecutor(currentTry,
                     setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
         // hedge模式下，resultFuture可能被之前的调用成功set值，所里这里不仅检查是否需要重试，也检查下是否已经取到了最终结果
         if (!resultFuture.isDone() && retryConfig.retryInterval >= 0) {
             // 没拿到最终结果，且重试次数还没用完，那我们接着加重试callback
-            addCallbackWithDirectExecutor(currentTry, new FutureCallback<T>() {
+            addCallbackWithCallbackExecutor(currentTry, new FutureCallback<T>() {
 
                 @Override
                 public void onSuccess(@Nullable T result) {
