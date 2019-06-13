@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
@@ -423,7 +422,6 @@ class ScopeAsyncRetryTest {
         for (int i = 0; i < 10000; i++) {
             System.out.println(i);
             AtomicBoolean timeoutListenerTriggered = new AtomicBoolean(false);
-            CountDownLatch latch = new CountDownLatch(1);
             try {
                 String result = retrier.callWithRetry(1, retryNTimes(0, 0, false),
                         () -> new TimeoutListenableFuture<>(executor.submit(() -> {
@@ -431,7 +429,6 @@ class ScopeAsyncRetryTest {
                             return expectResult;
                         }), () -> {
                             timeoutListenerTriggered.set(true);
-                            latch.countDown();
                         })).get();
                 // 这里验证下没抛 TimeoutException 的时候一定没有调用 timeout listener
                 assertEquals(expectResult, result);
@@ -440,7 +437,6 @@ class ScopeAsyncRetryTest {
                 if (Throwables.getRootCause(t) instanceof TimeoutException) {
                     System.out.println("timeout");
                     // 这里验证下抛 TimeoutException 的时候一定都调用了 timeout listener
-                    latch.await();
                     assertTrue(timeoutListenerTriggered.get());
                 } else {
                     throw t;
