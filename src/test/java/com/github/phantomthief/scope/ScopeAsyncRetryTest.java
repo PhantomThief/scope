@@ -435,7 +435,6 @@ class ScopeAsyncRetryTest {
                 System.out.println("nothing.");
             } catch (TimeoutException e) {
                 System.out.println("timeout by caller.");
-                assertTrue(timeoutListenerTriggered.get());
             } catch (ExecutionException e) {
                 if (Throwables.getRootCause(e) instanceof TimeoutException) {
                     System.out.println("timeout by retrier.");
