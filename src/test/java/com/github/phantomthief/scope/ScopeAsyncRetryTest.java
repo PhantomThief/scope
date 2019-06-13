@@ -9,6 +9,7 @@ import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import static java.time.Duration.ofMillis;
 import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.concurrent.TimeUnit.MICROSECONDS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -19,16 +20,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nullable;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.github.phantomthief.util.ThrowableSupplier;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -342,5 +349,111 @@ class ScopeAsyncRetryTest {
         initKey();
         assertThrows(TimeoutException.class, () -> successAfter("test", 200).get(0, NANOSECONDS));
         endScope();
+    }
+
+    private static class TimeoutListenableFuture<T> implements ListenableFuture<T> {
+
+        private final ListenableFuture<T> originFuture;
+        private final Runnable listener;
+
+        TimeoutListenableFuture(ListenableFuture<T> originFuture, Runnable listener) {
+            this.originFuture = originFuture;
+            this.listener = listener;
+        }
+
+        @Override
+        public void addListener(Runnable listener, Executor executor) {
+            originFuture.addListener(listener, executor);
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return originFuture.cancel(mayInterruptIfRunning);
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return originFuture.isCancelled();
+        }
+
+        @Override
+        public boolean isDone() {
+            return originFuture.isDone();
+        }
+
+        @Override
+        public T get() throws InterruptedException, ExecutionException {
+            try {
+                return originFuture.get();
+            } catch (Throwable t) {
+                if (t instanceof TimeoutException) {
+                    listener.run();
+                }
+                throw t;
+            }
+        }
+
+        @Override
+        public T get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+            try {
+                return originFuture.get(timeout, unit);
+            } catch (Throwable t) {
+                if (t instanceof TimeoutException) {
+                    listener.run();
+                }
+                throw t;
+            }
+        }
+    }
+
+    @Test
+    void testTimeoutListenableFuture() throws Throwable {
+        for (int i = 0; i < 10000; i++) {
+            System.out.println(i);
+            AtomicBoolean timeouted = new AtomicBoolean(false);
+            TimeoutListenableFuture<String> future = new TimeoutListenableFuture<>(executor.submit(() -> {
+                sleepUninterruptibly(1, MILLISECONDS);
+                return "haha";
+            }), () -> timeouted.set(true));
+            try {
+                future.get(0, NANOSECONDS);
+            } catch (Throwable t) {
+                // ignore
+            }
+            assertTrue(timeouted.get());
+        }
+    }
+
+    @Test
+    void testCallerTimeoutListener() throws Throwable {
+        String expectResult = "hahaha";
+        for (int i = 0; i < 10000; i++) {
+            System.out.println(i);
+            AtomicBoolean timeoutListenerTriggered = new AtomicBoolean(false);
+            CountDownLatch latch = new CountDownLatch(1);
+            try {
+                String result = retrier.callWithRetry(1, retryNTimes(0, 0, false),
+                        () -> new TimeoutListenableFuture<>(executor.submit(() -> {
+                            sleepUninterruptibly(ThreadLocalRandom.current().nextInt(2000), MICROSECONDS);
+                            return expectResult;
+                        }), () -> {
+                            timeoutListenerTriggered.set(true);
+                            latch.countDown();
+                        })).get();
+                // 这里验证下没抛 TimeoutException 的时候一定没有调用 timeout listener
+                Assertions.assertEquals(expectResult, result);
+                Assertions.assertFalse(timeoutListenerTriggered.get());
+            } catch (Throwable t) {
+                if (Throwables.getRootCause(t) instanceof TimeoutException) {
+                    System.out.println("timeout");
+                    //                    t.printStackTrace();
+                    // 这里验证下抛 TimeoutException 的时候一定都调用了 timeout listener
+                    latch.await();
+                    Assertions.assertTrue(timeoutListenerTriggered.get());
+                } else {
+                    throw t;
+                }
+            }
+        }
     }
 }

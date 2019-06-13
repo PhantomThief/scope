@@ -2,6 +2,8 @@ package com.github.phantomthief.scope;
 
 import static com.github.phantomthief.scope.Scope.getCurrentScope;
 import static com.github.phantomthief.scope.Scope.supplyWithExistScope;
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
@@ -11,8 +13,11 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -76,6 +81,11 @@ public class ScopeAsyncRetry {
         return new ScopeAsyncRetry(executor);
     }
 
+    public static ScopeAsyncRetry createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor,
+            Executor callbackExecutor) {
+        return new ScopeAsyncRetry(executor, callbackExecutor);
+    }
+
     /**
      * 共享的 ScopeAsyncRetry 实例
      * <p>
@@ -113,7 +123,7 @@ public class ScopeAsyncRetry {
         };
     }
 
-    private static <T> FutureCallback<T> cancelOtherSettableFuture(SettableFuture<T> target,
+    private static <T> FutureCallback<T> cancelOtherFuture(Future<T> target,
             boolean mayInterruptIfRunning) {
         return new FutureCallback<T>() {
 
@@ -148,6 +158,11 @@ public class ScopeAsyncRetry {
         addCallback(future, callback, directExecutor());
     }
 
+    private <T> void addCallbackWithCallbackExecutor(ListenableFuture<T> future,
+            FutureCallback<? super T> callback) {
+        addCallback(future, callback, callbackExecutor);
+    }
+
     private static class RetryConfig {
 
         private final long retryInterval;
@@ -177,7 +192,11 @@ public class ScopeAsyncRetry {
     @Nonnull
     public <T, X extends Throwable> ListenableFuture<T> callWithRetry(long singleCallTimeoutMs,
             RetryPolicy retryPolicy, @Nonnull ThrowableSupplier<ListenableFuture<T>, X> func,
-            FutureCallback<T> eachRetryCallback) {
+            @Nullable FutureCallback<T> eachRetryCallback) {
+        checkNotNull(retryPolicy);
+        checkNotNull(func);
+        checkArgument(singleCallTimeoutMs > 0);
+
         // 用来保存最终的结果
         SettableFuture<T> resultFuture = SettableFuture.create();
 
@@ -208,32 +227,53 @@ public class ScopeAsyncRetry {
         if (eachRetryCallback != null) {
             addCallback(currentTry, eachRetryCallback, callbackExecutor);
         }
+        AtomicBoolean currentTrySetted = new AtomicBoolean(false);
         RefHolder<ListenableFuture<T>> callingFuture = new RefHolder<>();
         try {
             callingFuture.set(func.get());
             addCallbackWithDirectExecutor(callingFuture.get(),
-                    setAllResultToOtherSettableFuture(currentTry));
+                    new FutureCallback<T>() {
+                        @Override
+                        public void onSuccess(@Nullable T result) {
+                            if (currentTrySetted.compareAndSet(false, true)) {
+                                currentTry.set(result);
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(Throwable t) {
+                            if (currentTrySetted.compareAndSet(false, true)) {
+                                currentTry.setException(t);
+                            }
+                        }
+                    });
         } catch (Throwable t) {
             currentTry.setException(t);
         }
         if (callingFuture.get() != null) {
             // 看是先超时还是先执行完成或者执行抛异常
             scheduler.schedule(() -> {
-                currentTry.setException(new TimeoutException());
                 if (retryConfig.triggerGetOnTimeout) {
-                    try {
-                        callingFuture.get().get(0, NANOSECONDS);
-                    } catch (Throwable t) {
-                        // ignore
+                    if (currentTrySetted.compareAndSet(false, true)) {
+                        try {
+                            // 这里get一下是为了触发一些 listener，例子参考 ScopeAsyncRetryTest.testTimeoutListenableFuture
+                            T result = callingFuture.get().get(0, NANOSECONDS);
+                            // 如果这会儿成功了还是把结果 set 给 currentTry
+                            currentTry.set(result);
+                        } catch (Throwable t) {
+                            currentTry.setException(t);
+                        }
                     }
+                } else {
+                    currentTry.setException(new TimeoutException());
                 }
                 if (!retryConfig.hedge) {
                     // 普通模式下，这次重试超时就把这次的future cancel掉
-                    currentTry.cancel(false);
+                    callingFuture.get().cancel(false);
                 } else {
                     // hedge模式下，这次重试等到最终结果确定下来之后再cancel
                     addCallbackWithDirectExecutor(resultFuture,
-                            cancelOtherSettableFuture(currentTry, false));
+                            cancelOtherFuture(callingFuture.get(), false));
                 }
             }, singleCallTimeoutMs, MILLISECONDS);
         }
@@ -246,18 +286,18 @@ public class ScopeAsyncRetry {
 
         if (retryConfig.retryInterval < 0) {
             // 如果不会再重试了，那就不管什么结果都set到最终结果里吧
-            addCallbackWithDirectExecutor(currentTry,
+            addCallbackWithCallbackExecutor(currentTry,
                     setAllResultToOtherSettableFuture(resultFuture));
         } else {
             // 本次尝试如果成功，直接给最终结果set上；超时或者异常的话，后边的重试操作都挂在catching里
-            addCallbackWithDirectExecutor(currentTry,
+            addCallbackWithCallbackExecutor(currentTry,
                     setSuccessResultToOtherSettableFuture(resultFuture));
         }
 
         // hedge模式下，resultFuture可能被之前的调用成功set值，所里这里不仅检查是否需要重试，也检查下是否已经取到了最终结果
         if (!resultFuture.isDone() && retryConfig.retryInterval >= 0) {
             // 没拿到最终结果，且重试次数还没用完，那我们接着加重试callback
-            addCallbackWithDirectExecutor(currentTry, new FutureCallback<T>() {
+            addCallbackWithCallbackExecutor(currentTry, new FutureCallback<T>() {
 
                 @Override
                 public void onSuccess(@Nullable T result) {
@@ -303,6 +343,10 @@ public class ScopeAsyncRetry {
                         new ThreadFactoryBuilder() //
                                 .setPriority(MAX_PRIORITY) //
                                 .setNameFormat("default-retrier-%d") //
+                                .build()), Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2,
+                        new ThreadFactoryBuilder() //
+                                .setPriority(MAX_PRIORITY) //
+                                .setNameFormat("default-callback-%d") //
                                 .build()));
     }
 }
