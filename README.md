@@ -14,7 +14,7 @@ scope [![Build Status](https://travis-ci.org/PhantomThief/scope.svg)](https://tr
 <dependency>
     <groupId>com.github.phantomthief</groupId>
     <artifactId>scope</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.12</version>
 </dependency>
 ```
 
