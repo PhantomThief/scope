@@ -44,7 +44,7 @@ import com.github.phantomthief.util.ThrowableSupplier;
  */
 public final class Scope {
 
-    private static final ThreadLocal<Scope> SCOPE_THREAD_LOCAL = new ThreadLocal<>();
+    private static final MyThreadLocal<Scope> SCOPE_THREAD_LOCAL = MyThreadLocalFactory.create();
 
     private final ConcurrentMap<ScopeKey<?>, Object> values = new ConcurrentHashMap<>();
 

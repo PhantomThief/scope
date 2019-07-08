@@ -6,6 +6,7 @@
     <properties>
         <!-- dep -->
         <more-lambdas.version>0.1.8</more-lambdas.version>
+        <netty-common.version>4.1.32.Final</netty-common.version>
         <jsr305.version>3.0.2</jsr305.version>
 
         <!-- test -->
@@ -66,6 +67,12 @@
             <groupId>com.github.phantomthief</groupId>
             <artifactId>more-lambdas</artifactId>
             <version>${more-lambdas.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+            <version>${netty-common.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.google.code.findbugs</groupId>
