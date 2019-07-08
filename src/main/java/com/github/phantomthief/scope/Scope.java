@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 
 import com.github.phantomthief.util.ThrowableRunnable;
 import com.github.phantomthief.util.ThrowableSupplier;
+import com.google.common.annotations.Beta;
 
 /**
  * 自定义Scope，支持如下功能：
@@ -47,6 +48,11 @@ public final class Scope {
     private static final MyThreadLocal<Scope> SCOPE_THREAD_LOCAL = MyThreadLocalFactory.create();
 
     private final ConcurrentMap<ScopeKey<?>, Object> values = new ConcurrentHashMap<>();
+
+    @Beta
+    public static boolean fastThreadLocalEnabled() {
+        return MyThreadLocalFactory.fastThreadLocalEnabled();
+    }
 
     public static <X extends Throwable> void runWithExistScope(@Nullable Scope scope,
             ThrowableRunnable<X> runnable) throws X {

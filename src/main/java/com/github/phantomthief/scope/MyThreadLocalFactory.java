@@ -11,8 +11,10 @@ class MyThreadLocalFactory {
 
     private static final Logger logger = LoggerFactory.getLogger(MyThreadLocalFactory.class);
 
+    static final String USE_FAST_THREAD_LOCAL = "USE_FAST_THREAD_LOCAL";
+
     static <T> MyThreadLocal<T> create() {
-        if (Boolean.getBoolean("USE_FAST_THREAD_LOCAL")) {
+        if (Boolean.getBoolean(USE_FAST_THREAD_LOCAL)) {
             try {
                 NettyFastThreadLocal<T> nettyFastThreadLocal = new NettyFastThreadLocal<>();
                 logger.info("using fast thread local as scope implements.");
@@ -23,5 +25,17 @@ class MyThreadLocalFactory {
         }
         // TODO auto adaptive thread local between jdk thread local and netty fast thread local?
         return new JdkThreadLocal<>();
+    }
+
+    static boolean fastThreadLocalEnabled() {
+        if (Boolean.getBoolean(USE_FAST_THREAD_LOCAL)) {
+            try {
+                new NettyFastThreadLocal<>();
+                return true;
+            } catch (Error e) {
+                // ignore
+            }
+        }
+        return false;
     }
 }
