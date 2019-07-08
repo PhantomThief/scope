@@ -14,7 +14,9 @@ class MyThreadLocalFactory {
     static <T> MyThreadLocal<T> create() {
         if (Boolean.getBoolean("USE_FAST_THREAD_LOCAL")) {
             try {
-                return new NettyFastThreadLocal<>();
+                NettyFastThreadLocal<T> nettyFastThreadLocal = new NettyFastThreadLocal<>();
+                logger.info("using fast thread local as scope implements.");
+                return nettyFastThreadLocal;
             } catch (Error e) {
                 logger.warn("cannot use fast thread local as scope implements.");
             }
