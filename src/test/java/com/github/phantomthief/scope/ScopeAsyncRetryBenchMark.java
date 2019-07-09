@@ -54,9 +54,9 @@ public class ScopeAsyncRetryBenchMark {
     @Setup
     public static void init() {
         retrier = new ScopeAsyncRetry(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors() * 100,
-                new ThreadFactoryBuilder() //
-                        .setPriority(MAX_PRIORITY) //
-                        .setNameFormat("default-retrier-%d") //
+                new ThreadFactoryBuilder()
+                        .setPriority(MAX_PRIORITY)
+                        .setNameFormat("default-retrier-%d")
                         .build()));
         beginScope();
     }

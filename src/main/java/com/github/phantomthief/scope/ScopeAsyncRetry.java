@@ -340,13 +340,13 @@ public class ScopeAsyncRetry {
 
         private static final ScopeAsyncRetry INSTANCE = createScopeAsyncRetry(
                 newScheduledThreadPool(Runtime.getRuntime().availableProcessors(),
-                        new ThreadFactoryBuilder() //
-                                .setPriority(MAX_PRIORITY) //
-                                .setNameFormat("default-retrier-%d") //
+                        new ThreadFactoryBuilder()
+                                .setPriority(MAX_PRIORITY)
+                                .setNameFormat("default-retrier-%d")
                                 .build()), Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2,
-                        new ThreadFactoryBuilder() //
-                                .setPriority(MAX_PRIORITY) //
-                                .setNameFormat("default-callback-%d") //
+                        new ThreadFactoryBuilder()
+                                .setPriority(MAX_PRIORITY)
+                                .setNameFormat("default-callback-%d")
                                 .build()));
     }
 }

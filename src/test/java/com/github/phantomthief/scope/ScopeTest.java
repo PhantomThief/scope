@@ -55,7 +55,7 @@ class ScopeTest {
                 newBlockingThreadPool(20, "another-%d"));
         for (int i = 0; i < 10; i++) {
             int j = i;
-            supplyAsyncWithCurrentScope(() -> { //
+            supplyAsyncWithCurrentScope(() -> {
                 runWithNewScope(() -> {
                     System.out.println("i'm in a new scope, my id:" + j);
                     TEST_KEY.set(j);
@@ -126,8 +126,8 @@ class ScopeTest {
 
     @Test
     void testDuplicateStartScope() {
-        runWithNewScope(() -> { //
-            assertThrows(IllegalStateException.class, () -> runWithNewScope(() -> { //
+        runWithNewScope(() -> {
+            assertThrows(IllegalStateException.class, () -> runWithNewScope(() -> {
                 Assertions.fail("");
             }));
         });
@@ -152,7 +152,7 @@ class ScopeTest {
                 assertEquals(TEST_KEY.get(), Integer.valueOf(2));
                 while (scope[0] == null) {
                     sleepUninterruptibly(10, MILLISECONDS);
-                    runWithExistScope(scope[0], () -> { //
+                    runWithExistScope(scope[0], () -> {
                         assertEquals(TEST_KEY.get(), Integer.valueOf(1));
                     });
                 }
@@ -218,10 +218,10 @@ class ScopeTest {
                     return j;
                 });
             }
-            System.out.println("invoke all:" + executorService.invokeAll(callableList).stream() //
-                    .map(f -> throwing(f::get)) //
+            System.out.println("invoke all:" + executorService.invokeAll(callableList).stream()
+                    .map(f -> throwing(f::get))
                     .collect(toList()));
-            System.out.println("supply async:" + supplyAsync(() -> { //
+            System.out.println("supply async:" + supplyAsync(() -> {
                 assertEquals(TEST_KEY.get(), Integer.valueOf(1));
                 return 1;
             }, executorService).get());
@@ -230,8 +230,8 @@ class ScopeTest {
     }
 
     private ExecutorService newBlockingThreadPool(int thread, String name) {
-        ExecutorService executor = newFixedThreadPool(thread, new ThreadFactoryBuilder() //
-                .setNameFormat(name) //
+        ExecutorService executor = newFixedThreadPool(thread, new ThreadFactoryBuilder()
+                .setNameFormat(name)
                 .build());
         ((ThreadPoolExecutor) executor).setRejectedExecutionHandler(new CallerRunsPolicy());
         return executor;
