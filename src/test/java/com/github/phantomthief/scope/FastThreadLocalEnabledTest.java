@@ -1,6 +1,7 @@
 package com.github.phantomthief.scope;
 
 import static com.github.phantomthief.scope.MyThreadLocalFactory.USE_FAST_THREAD_LOCAL;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,10 @@ class FastThreadLocalEnabledTest {
     @Test
     void test() {
         System.setProperty(USE_FAST_THREAD_LOCAL, "true");
+        assertTrue(Scope.fastThreadLocalEnabled());
+        assertTrue(Scope.setFastThreadLocal(false));
+        assertFalse(Scope.fastThreadLocalEnabled());
+        assertTrue(Scope.tryEnableFastThreadLocal());
         assertTrue(Scope.fastThreadLocalEnabled());
     }
 }
