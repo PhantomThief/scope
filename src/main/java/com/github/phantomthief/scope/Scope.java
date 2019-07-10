@@ -6,6 +6,9 @@ import java.util.concurrent.ConcurrentMap;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.github.phantomthief.util.ThrowableRunnable;
 import com.github.phantomthief.util.ThrowableSupplier;
 import com.google.common.annotations.Beta;
@@ -45,13 +48,50 @@ import com.google.common.annotations.Beta;
  */
 public final class Scope {
 
-    private static final MyThreadLocal<Scope> SCOPE_THREAD_LOCAL = MyThreadLocalFactory.create();
+    private static final Logger logger = LoggerFactory.getLogger(Scope.class);
+
+    private static final SubstituteThreadLocal<Scope> SCOPE_THREAD_LOCAL = MyThreadLocalFactory.create();
 
     private final ConcurrentMap<ScopeKey<?>, Object> values = new ConcurrentHashMap<>();
 
     @Beta
     public static boolean fastThreadLocalEnabled() {
-        return MyThreadLocalFactory.fastThreadLocalEnabled();
+        try {
+            return SCOPE_THREAD_LOCAL.getRealThreadLocal() instanceof NettyFastThreadLocal;
+        } catch (Error e) {
+            return false;
+        }
+    }
+
+    /**
+     * @return {@code true} if fast thread local was enabled.
+     */
+    @Beta
+    public static boolean tryEnableFastThreadLocal() {
+        return setFastThreadLocal(true);
+    }
+
+    static boolean setFastThreadLocal(boolean usingFastThreadLocal) {
+        // no lock need here, for benchmark friendly
+        // unnecessary to copy content of thread local. it's only for switch on initial stage or testing.
+        if (usingFastThreadLocal) {
+            try {
+                if (!(SCOPE_THREAD_LOCAL.getRealThreadLocal() instanceof NettyFastThreadLocal)) {
+                    SCOPE_THREAD_LOCAL.setRealThreadLocal(new NettyFastThreadLocal<>());
+                    logger.info("change current scope's implements to fast thread local.");
+                }
+            } catch (Error e) {
+                logger.warn("fail to change scope's implements to fast thread local.");
+                return false;
+            }
+            return true;
+        } else {
+            if (!(SCOPE_THREAD_LOCAL.getRealThreadLocal() instanceof JdkThreadLocal)) {
+                SCOPE_THREAD_LOCAL.setRealThreadLocal(new JdkThreadLocal<>());
+                logger.info("change current scope's implements to jdk thread local.");
+            }
+            return true;
+        }
     }
 
     public static <X extends Throwable> void runWithExistScope(@Nullable Scope scope,

@@ -13,29 +13,21 @@ class MyThreadLocalFactory {
 
     static final String USE_FAST_THREAD_LOCAL = "USE_FAST_THREAD_LOCAL";
 
-    static <T> MyThreadLocal<T> create() {
+    static <T> SubstituteThreadLocal<T> create() {
+        MyThreadLocal<T> real = null;
         if (Boolean.getBoolean(USE_FAST_THREAD_LOCAL)) {
             try {
                 NettyFastThreadLocal<T> nettyFastThreadLocal = new NettyFastThreadLocal<>();
                 logger.info("using fast thread local as scope implements.");
-                return nettyFastThreadLocal;
+                real = nettyFastThreadLocal;
             } catch (Error e) {
                 logger.warn("cannot use fast thread local as scope implements.");
             }
         }
         // TODO auto adaptive thread local between jdk thread local and netty fast thread local?
-        return new JdkThreadLocal<>();
-    }
-
-    static boolean fastThreadLocalEnabled() {
-        if (Boolean.getBoolean(USE_FAST_THREAD_LOCAL)) {
-            try {
-                new NettyFastThreadLocal<>();
-                return true;
-            } catch (Error e) {
-                // ignore
-            }
+        if (real == null) {
+            real = new JdkThreadLocal<>();
         }
-        return false;
+        return new SubstituteThreadLocal<>(real);
     }
 }
