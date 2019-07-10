@@ -13,6 +13,7 @@
         <guava.version>20.0</guava.version>
         <junit-bom.version>5.5.0</junit-bom.version>
         <logback-classic.version>1.2.3</logback-classic.version>
+        <jmh.version>1.21</jmh.version>
 
         <!-- plugin -->
         <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
@@ -22,7 +23,6 @@
         <jacoco-maven-plugin.version>0.8.4</jacoco-maven-plugin.version>
         <coveralls-maven-plugin.version>4.3.0</coveralls-maven-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M3</maven-surefire-plugin.version>
-        <jmh.version>1.21</jmh.version>
     </properties>
 
     <parent>
