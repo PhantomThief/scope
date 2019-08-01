@@ -11,7 +11,7 @@
 
         <!-- test -->
         <guava.version>20.0</guava.version>
-        <junit-bom.version>5.5.0</junit-bom.version>
+        <junit.version>5.5.1</junit.version>
         <logback-classic.version>1.2.3</logback-classic.version>
         <jmh.version>1.21</jmh.version>
 
@@ -62,7 +62,7 @@
             <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
-                <version>${junit-bom.version}</version>
+                <version>${junit.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
