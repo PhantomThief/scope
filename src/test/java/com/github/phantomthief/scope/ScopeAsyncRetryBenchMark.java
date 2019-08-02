@@ -3,6 +3,7 @@ package com.github.phantomthief.scope;
 import static com.github.phantomthief.scope.RetryPolicy.retryNTimes;
 import static com.github.phantomthief.scope.Scope.beginScope;
 import static com.github.phantomthief.scope.Scope.endScope;
+import static com.github.phantomthief.scope.ScopeAsyncRetry.createScopeAsyncRetry;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static java.lang.Thread.MAX_PRIORITY;
 
@@ -49,15 +50,24 @@ public class ScopeAsyncRetryBenchMark {
         return listeningScheduledExecutorService.schedule(() -> expected, timeout, TimeUnit.MILLISECONDS);
     }
 
-    private static ScopeAsyncRetry retrier;
+    private static ScopeAsyncRetry directCallbackRetry;
+    private static ScopeAsyncRetry isolateCallbackRetry;
 
     @Setup
     public static void init() {
-        retrier = new ScopeAsyncRetry(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors() * 100,
-                new ThreadFactoryBuilder()
-                        .setPriority(MAX_PRIORITY)
-                        .setNameFormat("default-retrier-%d")
-                        .build()));
+        directCallbackRetry =
+                createScopeAsyncRetry(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors(),
+                        new ThreadFactoryBuilder()
+                                .setPriority(MAX_PRIORITY)
+                                .setNameFormat("default-directCallbackRetry-%d")
+                                .build()));
+        isolateCallbackRetry =
+                createScopeAsyncRetry(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors(),
+                        new ThreadFactoryBuilder()
+                                .setPriority(MAX_PRIORITY)
+                                .setNameFormat("default-isolateCallbackRetry-%d")
+                                .build()),
+                        Executors.newCachedThreadPool());
         beginScope();
     }
 
@@ -68,13 +78,35 @@ public class ScopeAsyncRetryBenchMark {
 
     @Benchmark
     public static void testAllTimeout() {
-        retrier.callWithRetry(10, retryNTimes(3, 10),
+        directCallbackRetry.callWithRetry(10, retryNTimes(3, 10),
                 () -> successAfter("test", 1000));
     }
 
     @Benchmark
     public static void testAllTimeout2() {
-        retrier.callWithRetry(10, new RetryPolicy() {
+        directCallbackRetry.callWithRetry(10, new RetryPolicy() {
+                    @Override
+                    public long retry(int retryCount) {
+                        return retryCount <= 3 ? 10 : NO_RETRY;
+                    }
+
+                    @Override
+                    public boolean triggerGetOnTimeout() {
+                        return true;
+                    }
+                },
+                () -> successAfter("test", 1000));
+    }
+
+    @Benchmark
+    public static void testAllTimeout3() {
+        isolateCallbackRetry.callWithRetry(10, retryNTimes(3, 10),
+                () -> successAfter("test", 1000));
+    }
+
+    @Benchmark
+    public static void testAllTimeout4() {
+        isolateCallbackRetry.callWithRetry(10, new RetryPolicy() {
                     @Override
                     public long retry(int retryCount) {
                         return retryCount <= 3 ? 10 : NO_RETRY;

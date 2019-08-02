@@ -8,12 +8,12 @@ import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static java.lang.Thread.MAX_PRIORITY;
+import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
@@ -75,8 +75,11 @@ public class ScopeAsyncRetry {
     private final Executor callbackExecutor;
 
     /**
-     * 新建一个 ScopeAsyncRetry 实例
+     * 因为使用 directExecutor 执行 callback 操作，导致 callback 任务占用 ScheduledExecutorService，
+     * 从而导致超时控制的有效性可能会随着负载提高而急剧下降
+     * 请使用 {@link ScopeAsyncRetry#createScopeAsyncRetry(ScheduledExecutorService, Executor)}
      */
+    @Deprecated
     public static ScopeAsyncRetry createScopeAsyncRetry(@Nonnegative ScheduledExecutorService executor) {
         return new ScopeAsyncRetry(executor);
     }
@@ -96,6 +99,7 @@ public class ScopeAsyncRetry {
         return LazyHolder.INSTANCE;
     }
 
+    @Deprecated
     ScopeAsyncRetry(ScheduledExecutorService scheduler) {
         this(scheduler, directExecutor());
     }
@@ -220,6 +224,11 @@ public class ScopeAsyncRetry {
             Supplier<RetryConfig> retryConfigSupplier, SettableFuture<T> resultFuture,
             FutureCallback<T> eachRetryCallback) {
 
+        // 如果外部主动 cancel 了，那就不用再做后边没完成的 retry 了
+        if (resultFuture.isDone()) {
+            return resultFuture;
+        }
+
         RetryConfig retryConfig = retryConfigSupplier.get();
 
         // 开始当前一次调用尝试
@@ -343,7 +352,8 @@ public class ScopeAsyncRetry {
                         new ThreadFactoryBuilder()
                                 .setPriority(MAX_PRIORITY)
                                 .setNameFormat("default-retrier-%d")
-                                .build()), Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2,
+                                .build()),
+                newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2,
                         new ThreadFactoryBuilder()
                                 .setPriority(MAX_PRIORITY)
                                 .setNameFormat("default-callback-%d")
