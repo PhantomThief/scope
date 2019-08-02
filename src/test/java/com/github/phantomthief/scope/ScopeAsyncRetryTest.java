@@ -3,12 +3,15 @@ package com.github.phantomthief.scope;
 import static com.github.phantomthief.scope.RetryPolicy.retryNTimes;
 import static com.github.phantomthief.scope.Scope.beginScope;
 import static com.github.phantomthief.scope.Scope.endScope;
+import static com.github.phantomthief.scope.ScopeAsyncRetry.createScopeAsyncRetry;
 import static com.github.phantomthief.scope.ScopeAsyncRetry.shared;
 import static com.github.phantomthief.scope.ScopeKey.allocate;
+import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
+import static java.lang.Thread.MAX_PRIORITY;
 import static java.time.Duration.ofMillis;
-import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.concurrent.Executors.newCachedThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -20,13 +23,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
@@ -39,6 +47,8 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * @author w.vela
@@ -47,8 +57,10 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 class ScopeAsyncRetryTest {
 
     private final ScopeAsyncRetry retrier = shared();
-    private final ListeningExecutorService executor = listeningDecorator(newFixedThreadPool(10));
+    private final ListeningExecutorService executor = listeningDecorator(newCachedThreadPool());
     private final ScopeKey<String> context = allocate();
+    private final ListeningScheduledExecutorService scheduler =
+            listeningDecorator(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors()));
 
     private void initKey() {
         context.set("test");
@@ -79,7 +91,7 @@ class ScopeAsyncRetryTest {
         initKey();
         ListenableFuture<String> future = retrier.callWithRetry(10, retryNTimes(3, 10),
                 () -> successAfter("test", 100));
-        Futures.addCallback(future, new FutureCallback<String>() {
+        addCallback(future, new FutureCallback<String>() {
             @Override
             public void onSuccess(@Nullable String result) {
                 System.out.println(result);
@@ -252,12 +264,62 @@ class ScopeAsyncRetryTest {
         endScope();
     }
 
+    private final AtomicLong callTimes = new AtomicLong(0);
+
+    private void clearCallTimes() {
+        callTimes.set(0);
+    }
+
+    private long getCallTimes() {
+        return callTimes.get();
+    }
+
     private ListenableFuture<String> successAfter(String expected, long timeout) {
+        callTimes.incrementAndGet();
+        assertContext();
+        return scheduler.schedule(() -> expected, timeout, MILLISECONDS);
+    }
+
+    private ListenableFuture<String> exceptionAfter(long timeout) {
+        callTimes.incrementAndGet();
+        return scheduler.schedule(() -> {
+            throw new RuntimeException();
+        }, timeout, MILLISECONDS);
+    }
+
+    private ListenableFuture<String> successAfterBySleep(String expected, long timeout) {
+        callTimes.incrementAndGet();
         assertContext();
         return executor.submit(() -> {
             sleepUninterruptibly(timeout, MILLISECONDS);
             return expected;
         });
+    }
+
+    private MySupplier2 exceptionsAndThenSuccess(Throwable[] exceptionArray) {
+        assertContext();
+        return new MySupplier2(exceptionArray);
+    }
+
+    private class MySupplier2 implements ThrowableSupplier<ListenableFuture<String>, RuntimeException> {
+
+        private final Throwable[] exceptionArray;
+        private int current = 0;
+
+        MySupplier2(Throwable[] exceptionArray) {
+            this.exceptionArray = exceptionArray;
+        }
+
+        @Override
+        public ListenableFuture<String> get() throws RuntimeException {
+            callTimes.incrementAndGet();
+            int idx = current++;
+            if (idx < exceptionArray.length) {
+                return Futures.immediateFailedFuture(exceptionArray[idx]);
+            } else {
+                return Futures.immediateFuture("test");
+            }
+        }
     }
 
     private MySupplier1 sleepySuccess(long[] sleepArray) {
@@ -278,6 +340,7 @@ class ScopeAsyncRetryTest {
 
         @Override
         public ListenableFuture<String> get() {
+            callTimes.incrementAndGet();
             return executor.submit(() -> {
                 int index = current++;
                 long sleepFor = sleepArray[index];
@@ -289,6 +352,37 @@ class ScopeAsyncRetryTest {
 
     @Test
     void testAllTimeoutWithEachListener() {
+        clearCallTimes();
+        beginScope();
+        initKey();
+        AtomicInteger succNum = new AtomicInteger(0);
+        AtomicInteger failedNum = new AtomicInteger(0);
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10, false),
+                    () -> successAfter("test", 200), new FutureCallback<String>() {
+                        @Override
+                        public void onSuccess(@Nullable String result) {
+                            succNum.incrementAndGet();
+                        }
+
+                        @Override
+                        public void onFailure(Throwable t) {
+                            failedNum.incrementAndGet();
+                        }
+                    });
+            assertThrows(TimeoutException.class,
+                    () -> assertTimeout(ofMillis(60), () -> future.get(5, MILLISECONDS)));
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        assertEquals(40, getCallTimes());
+        assertEquals(0, succNum.get());
+        assertEquals(40, failedNum.get());
+    }
+
+    @Test
+    void testAllTimeoutWithEachListenerWithHedgeMode() {
+        clearCallTimes();
         beginScope();
         initKey();
         AtomicInteger succNum = new AtomicInteger(0);
@@ -307,12 +401,13 @@ class ScopeAsyncRetryTest {
                         }
                     });
             assertThrows(TimeoutException.class,
-                    () -> assertTimeout(ofMillis(60), () -> future.get(50, MILLISECONDS)));
+                    () -> assertTimeout(ofMillis(60), () -> future.get(5, MILLISECONDS)));
         }
-        endScope();
         sleepUninterruptibly(1, SECONDS);
+        endScope();
+        assertEquals(20, getCallTimes());
         assertEquals(0, succNum.get());
-        assertEquals(30, failedNum.get());
+        assertEquals(20, failedNum.get());
     }
 
     @Test
@@ -437,7 +532,6 @@ class ScopeAsyncRetryTest {
                 System.out.println("nothing.");
             } catch (TimeoutException e) {
                 System.out.println("timeout by caller.");
-                assertTrue(timeoutListenerTriggered.get());
             } catch (ExecutionException e) {
                 if (Throwables.getRootCause(e) instanceof TimeoutException) {
                     System.out.println("timeout by retrier.");
@@ -448,5 +542,148 @@ class ScopeAsyncRetryTest {
                 }
             }
         }
+    }
+
+    @Test
+    void testRetryForException() throws Throwable {
+        clearCallTimes();
+        beginScope();
+        initKey();
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future =
+                    retrier.callWithRetry(100, retryNTimes(3, 10, false), sleepySuccess(new long[] {300L, 200L, 50L}));
+            future.get();
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        System.out.println(getCallTimes());
+        assertEquals(30, getCallTimes());
+
+        clearCallTimes();
+        beginScope();
+        initKey();
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future =
+                    retrier.callWithRetry(100, retryNTimes(3, 10, false), sleepySuccess(new long[] {300L, 200L, 50L}));
+            future.cancel(false);
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        System.out.println(getCallTimes());
+        assertEquals(10, getCallTimes());
+
+        clearCallTimes();
+        beginScope();
+        initKey();
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future =
+                    retrier.callWithRetry(1, retryNTimes(3, 10, false), exceptionsAndThenSuccess(
+                            new Throwable[] {new RuntimeException(), new IllegalStateException()}));
+            future.get();
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        System.out.println(getCallTimes());
+        assertEquals(30, getCallTimes());
+
+        clearCallTimes();
+        beginScope();
+        initKey();
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future =
+                    retrier.callWithRetry(100, retryNTimes(3, 10, false), exceptionsAndThenSuccess(
+                            new Throwable[] {new RuntimeException(), new IllegalStateException(),
+                                    new IllegalArgumentException()}));
+            future.cancel(false);
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        System.out.println(getCallTimes());
+        assertEquals(10, getCallTimes());
+    }
+
+    @Test
+    void testNoMoreNewRetryAfterCancel() {
+        clearCallTimes();
+        beginScope();
+        initKey();
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10, false),
+                    () -> successAfter("test", 200));
+            assertThrows(TimeoutException.class,
+                    () -> assertTimeout(ofMillis(60), () -> {
+                        future.get(5, MILLISECONDS);
+                    }));
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        System.out.println(getCallTimes());
+        assertEquals(40, getCallTimes());
+
+        clearCallTimes();
+        beginScope();
+        initKey();
+        for (int i = 0; i < 10; i++) {
+            ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10, false),
+                    () -> successAfter("test", 200));
+            assertThrows(TimeoutException.class,
+                    () -> assertTimeout(ofMillis(60), () -> {
+                        future.get(5, MILLISECONDS);
+                    }));
+            future.cancel(false);
+        }
+        sleepUninterruptibly(1, SECONDS);
+        endScope();
+        System.out.println(getCallTimes());
+        assertEquals(10, getCallTimes());
+    }
+
+    private static final ScopeAsyncRetry directCallbackRetry =
+            createScopeAsyncRetry(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors(),
+                    new ThreadFactoryBuilder() //
+                            .setPriority(MAX_PRIORITY) //
+                            .setNameFormat("default-directCallbackRetry-%d") //
+                            .build()));
+
+    private static final ExecutorService EXECUTOR_SERVICE = Executors.newCachedThreadPool();
+
+    @Test
+    void testPerformance() throws Throwable {
+        beginScope();
+        initKey();
+        AtomicLong succCount = new AtomicLong(0);
+        AtomicLong failCount = new AtomicLong(0);
+        long calls = 100000;
+        clearCallTimes();
+        ConcurrentLinkedQueue<ListenableFuture<String>> futures = new ConcurrentLinkedQueue<>();
+        for (int i = 0; i < calls; i++) {
+            EXECUTOR_SERVICE.submit(() -> {
+                ListenableFuture<String> future =
+                        directCallbackRetry
+                                .callWithRetry(1000, retryNTimes(3, 10, false), () -> successAfterBySleep("test", 200));
+                addCallback(future, new FutureCallback<String>() {
+                    @Override
+                    public void onSuccess(@Nullable String result) {
+                        succCount.incrementAndGet();
+                    }
+
+                    @Override
+                    public void onFailure(Throwable t) {
+                        failCount.incrementAndGet();
+                    }
+                });
+                futures.add(future);
+            });
+        }
+        sleepUninterruptibly(1, SECONDS);
+        System.out.println(futures.size());
+        while (futures.peek() != null) {
+            Future tmpFuture = futures.poll();
+            assertThrows(Throwable.class, tmpFuture::get);
+        }
+        System.out.println(getCallTimes());
+        assertEquals(calls, failCount.get());
+        assertEquals(0, succCount.get());
+        endScope();
     }
 }
