@@ -4,6 +4,7 @@ import static com.github.phantomthief.scope.MyThreadLocalFactory.USE_FAST_THREAD
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -12,6 +13,10 @@ import org.junit.jupiter.api.Test;
  */
 class FastThreadLocalEnabledTest {
 
+    /**
+     * 由于netty依赖是optional的，所以这个测试用例只在IDEA中手工运行确认
+     */
+    @Disabled
     @Test
     void test() {
         System.setProperty(USE_FAST_THREAD_LOCAL, "true");
