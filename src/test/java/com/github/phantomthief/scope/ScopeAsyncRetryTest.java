@@ -11,7 +11,7 @@ import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import static java.lang.Thread.MAX_PRIORITY;
 import static java.time.Duration.ofMillis;
-import static java.util.concurrent.Executors.newCachedThreadPool;
+import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -57,7 +57,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 class ScopeAsyncRetryTest {
 
     private final ScopeAsyncRetry retrier = shared();
-    private final ListeningExecutorService executor = listeningDecorator(newCachedThreadPool());
+    private final ListeningExecutorService executor =
+            listeningDecorator(newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4));
     private final ScopeKey<String> context = allocate();
     private final ListeningScheduledExecutorService scheduler =
             listeningDecorator(Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors()));
