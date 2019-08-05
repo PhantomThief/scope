@@ -92,7 +92,7 @@ public class ScopeAsyncRetry {
     /**
      * 共享的 ScopeAsyncRetry 实例
      * <p>
-     * 建议不同业务使用不同的实例，因为其中通过 ScheduledExecutorService 来检测超时 & 实现间隔重试
+     * 建议不同业务使用不同的实例，因为其中通过 ScheduledExecutorService 来检测超时 和 实现间隔重试
      * 大量使用共享实例，这里可能成为瓶颈
      */
     public static ScopeAsyncRetry shared() {
