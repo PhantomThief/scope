@@ -11,7 +11,7 @@
 
         <!-- test -->
         <guava.version>20.0</guava.version>
-        <junit.version>5.5.1</junit.version>
+        <junit.version>5.5.2</junit.version>
         <logback-classic.version>1.2.3</logback-classic.version>
         <jmh.version>1.21</jmh.version>
 
