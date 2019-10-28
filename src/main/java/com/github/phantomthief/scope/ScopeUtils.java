@@ -41,7 +41,7 @@ public final class ScopeUtils {
     private static final Logger logger = LoggerFactory.getLogger(ScopeUtils.class);
     private static final ConcurrentMap<LongCostTrackImpl, Boolean> MAP = new MapMaker()
             .weakKeys()
-            .concurrencyLevel(16)
+            .concurrencyLevel(64)
             .makeMap();
 
     private static final int CHECK_PERIOD = 1;
@@ -107,12 +107,17 @@ public final class ScopeUtils {
         Iterator<Entry<LongCostTrackImpl, Boolean>> iterator = MAP.entrySet().iterator();
         while (iterator.hasNext()) {
             Entry<LongCostTrackImpl, Boolean> entry = iterator.next();
+            LongCostTrackImpl key = entry.getKey();
+            if (key.closed) {
+                iterator.remove();
+                continue;
+            }
             long now = nanoTime();
-            long currentCost = now - entry.getKey().deadline;
+            long currentCost = now - key.deadline;
             if (currentCost > 0) {
-                runWithExistScope(entry.getKey().scope, () -> {
+                runWithExistScope(key.scope, () -> {
                     try {
-                        entry.getKey().runnable.accept(ofNanos(now - entry.getKey().start));
+                        key.runnable.accept(ofNanos(now - key.start));
                     } catch (Throwable e) {
                         logger.error("", e);
                     } finally {
@@ -129,6 +134,7 @@ public final class ScopeUtils {
         private final long start;
         private final long deadline;
         private final Scope scope;
+        private volatile boolean closed;
 
         private LongCostTrackImpl(Consumer<Duration> runnable, long start, long deadline, Scope scope) {
             this.runnable = runnable;
@@ -138,7 +144,9 @@ public final class ScopeUtils {
         }
 
         @Override
-        public void close() {  // 希望业务调用这个，这样可以更早的回收，而不用等到GC阶段
+        public void close() {
+            closed = true;
+            // 希望业务调用这个，这样可以更早的回收，而不用等到GC阶段
             MAP.remove(this);
         }
     }
