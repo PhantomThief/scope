@@ -57,4 +57,11 @@ public interface RetryPolicy {
     default boolean triggerGetOnTimeout() {
         return true;
     }
+
+    /**
+     * 判断抛出某个异常后，是否要终止重试
+     */
+    default boolean abortRetry(Throwable t) {
+        return false;
+    }
 }
