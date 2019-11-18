@@ -38,10 +38,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.github.phantomthief.util.ThrowableSupplier;
+import com.google.common.base.Supplier;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -686,5 +688,49 @@ class ScopeAsyncRetryTest {
         assertEquals(calls, failCount.get());
         assertEquals(0, succCount.get());
         endScope();
+    }
+
+    private static class AbortRetryException extends RuntimeException {
+    }
+
+    @Test
+    void testAbortRetry() {
+        AtomicInteger callTime = new AtomicInteger(0);
+        Supplier<ListenableFuture<String>> callFunction = new Supplier<ListenableFuture<String>>() {
+            @Override
+            public ListenableFuture<String> get() {
+                if (callTime.incrementAndGet() > 3) {
+                    throw new AbortRetryException();
+                } else {
+                    throw new RuntimeException();
+                }
+            }
+        };
+
+        ListenableFuture<String> resultFuture = retrier.callWithRetry(100, new RetryPolicy() {
+            private final AtomicInteger retryTime = new AtomicInteger();
+
+            @Override
+            public long retry(int retryCount) {
+                int rt = retryTime.incrementAndGet();
+                if (rt < 10) {
+                    return rt * 100;
+                } else {
+                    return NO_RETRY;
+                }
+            }
+
+            @Override
+            public boolean abortRetry(Throwable t) {
+                return t instanceof AbortRetryException;
+            }
+        }, callFunction::get);
+
+        try {
+            resultFuture.get();
+        } catch (Throwable t) {
+            Assertions.assertTrue(Throwables.getRootCause(t) instanceof AbortRetryException);
+        }
+        Assertions.assertEquals(4, callTime.get());
     }
 }

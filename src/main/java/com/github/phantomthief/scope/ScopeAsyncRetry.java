@@ -19,6 +19,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.annotation.Nonnegative;
@@ -172,11 +173,14 @@ public class ScopeAsyncRetry {
         private final long retryInterval;
         private final boolean hedge;
         private final boolean triggerGetOnTimeout;
+        private final Predicate<Throwable> abortRetry;
 
-        private RetryConfig(long retryInterval, boolean hedge, boolean triggerGetOnTimeout) {
+        private RetryConfig(long retryInterval, boolean hedge, boolean triggerGetOnTimeout,
+                Predicate<Throwable> abortRetry) {
             this.retryInterval = retryInterval;
             this.hedge = hedge;
             this.triggerGetOnTimeout = triggerGetOnTimeout;
+            this.abortRetry = abortRetry;
         }
     }
 
@@ -206,7 +210,8 @@ public class ScopeAsyncRetry {
 
         AtomicInteger retryTime = new AtomicInteger(0);
         Supplier<RetryConfig> retryConfigSupplier = () -> new RetryConfig(
-                retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge(), retryPolicy.triggerGetOnTimeout());
+                retryPolicy.retry(retryTime.incrementAndGet()), retryPolicy.hedge(), retryPolicy.triggerGetOnTimeout(),
+                retryPolicy::abortRetry);
 
         Scope scope = getCurrentScope();
         ThrowableSupplier<ListenableFuture<T>, X> scopeWrappedFunc = () -> supplyWithExistScope(
@@ -315,16 +320,22 @@ public class ScopeAsyncRetry {
 
                 @Override
                 public void onFailure(Throwable t) {
-                    // 不管之前是超时还是执行失败了，只要最终结果没拿到，且重试次数还没用完，就会到这里来
-                    if (retryConfig.retryInterval > 0) {
-                        // 延迟一会儿再重试
-                        scheduler.schedule(() -> {
-                            callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier,
-                                    resultFuture, eachRetryCallback);
-                        }, retryConfig.retryInterval, MILLISECONDS);
+                    // 判定这个异常是否需要重试
+                    if (retryConfig.abortRetry.test(t)) {
+                        resultFuture.setException(t);
                     } else {
-                        // 直接重试
-                        callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture, eachRetryCallback);
+                        // 不管之前是超时还是执行失败了，只要最终结果没拿到，且重试次数还没用完，就会到这里来
+                        if (retryConfig.retryInterval > 0) {
+                            // 延迟一会儿再重试
+                            scheduler.schedule(() -> {
+                                callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier,
+                                        resultFuture, eachRetryCallback);
+                            }, retryConfig.retryInterval, MILLISECONDS);
+                        } else {
+                            // 直接重试
+                            callWithRetry(func, singleCallTimeoutMs, retryConfigSupplier, resultFuture,
+                                    eachRetryCallback);
+                        }
                     }
                 }
             });
