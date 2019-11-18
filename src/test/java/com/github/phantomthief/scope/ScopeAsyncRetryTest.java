@@ -161,6 +161,8 @@ class ScopeAsyncRetryTest {
                 MySupplier1 func = sleepySuccess(new long[] {300L, 200L, 50L});
                 ListenableFuture<String> future = retrier.callWithRetry(100, retryNTimes(3, 10), func);
                 assertThrows(TimeoutException.class, () -> future.get(50, MILLISECONDS));
+                future.cancel(false);
+                sleepUninterruptibly(1, SECONDS);
                 assertEquals(1, func.current.get());
             }
         } finally {
@@ -540,9 +542,8 @@ class ScopeAsyncRetryTest {
                 return "haha";
             }), () -> timeout.set(true));
             try {
-                future.get(0, NANOSECONDS);
+                future.get(1, NANOSECONDS);
             } catch (Throwable t) {
-
                 // ignore
             }
             assertTrue(timeout.get());
