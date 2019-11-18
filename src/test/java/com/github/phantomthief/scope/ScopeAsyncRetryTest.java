@@ -508,6 +508,7 @@ class ScopeAsyncRetryTest {
             try {
                 future.get(0, NANOSECONDS);
             } catch (Throwable t) {
+
                 // ignore
             }
             assertTrue(timeout.get());
