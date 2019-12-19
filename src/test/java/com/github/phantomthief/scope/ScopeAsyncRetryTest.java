@@ -756,14 +756,11 @@ class ScopeAsyncRetryTest {
     @Test
     void testAbortRetry() {
         AtomicInteger callTime = new AtomicInteger(0);
-        Supplier<ListenableFuture<String>> callFunction = new Supplier<ListenableFuture<String>>() {
-            @Override
-            public ListenableFuture<String> get() {
-                if (callTime.incrementAndGet() > 3) {
-                    throw new AbortRetryException();
-                } else {
-                    throw new RuntimeException();
-                }
+        Supplier<ListenableFuture<String>> callFunction = () -> {
+            if (callTime.incrementAndGet() > 3) {
+                throw new AbortRetryException();
+            } else {
+                throw new RuntimeException();
             }
         };
 

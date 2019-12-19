@@ -84,14 +84,13 @@ public final class Scope {
                 logger.warn("fail to change scope's implements to fast thread local.");
                 return false;
             }
-            return true;
         } else {
             if (!(SCOPE_THREAD_LOCAL.getRealThreadLocal() instanceof JdkThreadLocal)) {
                 SCOPE_THREAD_LOCAL.setRealThreadLocal(new JdkThreadLocal<>());
                 logger.info("change current scope's implements to jdk thread local.");
             }
-            return true;
         }
+        return true;
     }
 
     public static <X extends Throwable> void runWithExistScope(@Nullable Scope scope,
