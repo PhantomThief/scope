@@ -10,7 +10,7 @@
         <jsr305.version>3.0.2</jsr305.version>
 
         <!-- test -->
-        <guava.version>20.0</guava.version>
+        <guava.version>28.1-jre</guava.version>
         <junit.version>5.6.1</junit.version>
         <logback-classic.version>1.2.3</logback-classic.version>
         <jmh.version>1.23</jmh.version>
