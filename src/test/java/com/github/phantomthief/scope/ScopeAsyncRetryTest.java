@@ -533,12 +533,11 @@ class ScopeAsyncRetryTest {
     }
 
     @Test
-    void testTimeoutListenableFuture() throws Throwable {
+    void testTimeoutListenableFuture() {
         for (int i = 0; i < 10000; i++) {
-            System.out.println(i);
             AtomicBoolean timeout = new AtomicBoolean(false);
             TimeoutListenableFuture<String> future = new TimeoutListenableFuture<>(executor.submit(() -> {
-                sleepUninterruptibly(1, MILLISECONDS);
+                sleepUninterruptibly(10, MILLISECONDS);
                 return "haha";
             }), () -> timeout.set(true));
             try {
