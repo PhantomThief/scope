@@ -7,6 +7,7 @@ import static com.github.phantomthief.scope.ScopeAsyncRetry.createScopeAsyncRetr
 import static com.github.phantomthief.scope.ScopeAsyncRetry.shared;
 import static com.github.phantomthief.scope.ScopeKey.allocate;
 import static com.google.common.util.concurrent.Futures.addCallback;
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
 import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import static java.lang.Thread.MAX_PRIORITY;
@@ -109,7 +110,7 @@ class ScopeAsyncRetryTest {
                 public void onFailure(Throwable t) {
                     t.printStackTrace();
                 }
-            });
+            }, directExecutor());
             try {
                 future.get();
             } catch (Throwable t) {
