@@ -732,7 +732,7 @@ class ScopeAsyncRetryTest {
                         public void onFailure(Throwable t) {
                             failCount.incrementAndGet();
                         }
-                    });
+                    }, directExecutor());
                     futures.add(future);
                 });
             }
