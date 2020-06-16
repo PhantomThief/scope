@@ -36,6 +36,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -45,6 +47,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  */
 class ScopeTest {
 
+    private static final Logger logger = LoggerFactory.getLogger(ScopeTest.class);
     private static final ScopeKey<Integer> TEST_KEY = allocate();
 
     @Test
@@ -57,21 +60,16 @@ class ScopeTest {
             int j = i;
             supplyAsyncWithCurrentScope(() -> {
                 runWithNewScope(() -> {
-                    System.out.println("i'm in a new scope, my id:" + j);
                     TEST_KEY.set(j);
                     Integer fromScope = TEST_KEY.get();
                     assertEquals(j, fromScope.intValue());
                     for (int k = 0; k < 10; k++) {
                         runAsyncWithCurrentScope(() -> {
                             Integer fromScope1 = TEST_KEY.get();
-                            System.out.println(
-                                    "i'm in exist scope id:" + j + ", from scope:" + fromScope1);
                             assertEquals(j, fromScope1.intValue());
                         }, anotherExecutor);
                         runAsyncWithCurrentScope(() -> {
                             Integer fromScope1 = TEST_KEY.get();
-                            System.out.println(
-                                    "i'm in exist scope id:" + j + ", from scope:" + fromScope1);
                             assertEquals(j, fromScope1.intValue());
                         }, anotherExecutor2);
                     }
@@ -83,7 +81,6 @@ class ScopeTest {
         shutdownAndAwaitTermination(executorService, 1, DAYS);
         shutdownAndAwaitTermination(anotherExecutor, 1, DAYS);
         shutdownAndAwaitTermination(anotherExecutor2, 1, DAYS);
-        System.out.println("fin.");
     }
 
     @Test
@@ -92,7 +89,6 @@ class ScopeTest {
         assertNull(test2.get());
         runWithNewScope(() -> {
             Object x = test2.get();
-            System.out.println(x);
             assertEquals(test2.get(), x);
             Scope currentScope = getCurrentScope();
             assertEquals(currentScope.get(test2), x);
@@ -157,7 +153,6 @@ class ScopeTest {
                     });
                 }
                 assertEquals(TEST_KEY.get(), Integer.valueOf(2));
-                System.out.println("thread test ok.");
             });
         });
         thread.start();
@@ -172,7 +167,6 @@ class ScopeTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        System.out.println("main test ok.");
     }
 
     @Test
@@ -202,14 +196,12 @@ class ScopeTest {
             TEST_KEY.set(1);
             assertEquals(TEST_KEY.get(), Integer.valueOf(1));
             executorService.execute(() -> {
-                System.out.println("execute:" + TEST_KEY.get());
                 assertEquals(TEST_KEY.get(), Integer.valueOf(1));
             });
-            System.out.println(executorService.submit(() -> {
-                System.out.println("submit:" + TEST_KEY.get());
+            executorService.submit(() -> {
                 assertEquals(TEST_KEY.get(), Integer.valueOf(1));
                 return 1;
-            }).get());
+            }).get();
             List<Callable<Integer>> callableList = new ArrayList<>();
             for (int i = 0; i < 50; i++) {
                 int j = i;
@@ -218,10 +210,10 @@ class ScopeTest {
                     return j;
                 });
             }
-            System.out.println("invoke all:" + executorService.invokeAll(callableList).stream()
+            logger.info("invoke all:{}", executorService.invokeAll(callableList).stream()
                     .map(f -> throwing(f::get))
                     .collect(toList()));
-            System.out.println("supply async:" + supplyAsync(() -> {
+            logger.info("supply async:{}", supplyAsync(() -> {
                 assertEquals(TEST_KEY.get(), Integer.valueOf(1));
                 return 1;
             }, executorService).get());

@@ -43,6 +43,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.ThrowingSupplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.github.phantomthief.util.ThrowableSupplier;
 import com.google.common.base.Supplier;
@@ -60,6 +62,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  */
 class ScopeAsyncRetryTest {
 
+    private static final Logger logger = LoggerFactory.getLogger(ScopeAsyncRetryTest.class);
     private final ScopeAsyncRetry retrier = shared();
     private final ListeningExecutorService executor =
             listeningDecorator(newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4));
@@ -103,7 +106,7 @@ class ScopeAsyncRetryTest {
             addCallback(future, new FutureCallback<String>() {
                 @Override
                 public void onSuccess(@Nullable String result) {
-                    System.out.println(result);
+                    logger.info("{}", result);
                 }
 
                 @Override
@@ -555,7 +558,6 @@ class ScopeAsyncRetryTest {
     void testCallerTimeoutListener() throws InterruptedException, ExecutionException {
         String expectResult = "hahaha";
         for (int i = 0; i < 10000; i++) {
-            System.out.println(i);
             AtomicBoolean timeoutListenerTriggered = new AtomicBoolean(false);
             try {
                 String result = retrier.callWithRetry(1, retryNTimes(0, 0, false),
@@ -568,12 +570,12 @@ class ScopeAsyncRetryTest {
                 // 这里验证下没抛 TimeoutException 的时候一定没有调用 timeout listener
                 assertEquals(expectResult, result);
                 assertFalse(timeoutListenerTriggered.get());
-                System.out.println("nothing.");
+                logger.info("nothing.");
             } catch (TimeoutException e) {
-                System.out.println("timeout by caller.");
+                logger.info("timeout by caller.");
             } catch (ExecutionException e) {
                 if (Throwables.getRootCause(e) instanceof TimeoutException) {
-                    System.out.println("timeout by retrier.");
+                    logger.info("timeout by retrier.");
                     // 这里验证下抛 TimeoutException 的时候一定都调用了 timeout listener
                     assertTrue(timeoutListenerTriggered.get());
                 } else {
@@ -599,7 +601,7 @@ class ScopeAsyncRetryTest {
         } finally {
             endScope();
         }
-        System.out.println(getCallTimes());
+        logger.info("{}", getCallTimes());
         assertEquals(30, getCallTimes());
 
         clearCallTimes();
@@ -616,7 +618,7 @@ class ScopeAsyncRetryTest {
         } finally {
             endScope();
         }
-        System.out.println(getCallTimes());
+        logger.info("{}", getCallTimes());
         assertEquals(10, getCallTimes());
 
         clearCallTimes();
@@ -633,7 +635,7 @@ class ScopeAsyncRetryTest {
         } finally {
             endScope();
         }
-        System.out.println(getCallTimes());
+        logger.info("{}", getCallTimes());
         assertEquals(30, getCallTimes());
 
         clearCallTimes();
@@ -651,7 +653,7 @@ class ScopeAsyncRetryTest {
         } finally {
             endScope();
         }
-        System.out.println(getCallTimes());
+        logger.info("{}", getCallTimes());
         assertEquals(10, getCallTimes());
     }
 
@@ -673,7 +675,7 @@ class ScopeAsyncRetryTest {
         } finally {
             endScope();
         }
-        System.out.println(getCallTimes());
+        logger.info("{}", getCallTimes());
         assertEquals(40, getCallTimes());
 
         clearCallTimes();
@@ -693,7 +695,7 @@ class ScopeAsyncRetryTest {
         } finally {
             endScope();
         }
-        System.out.println(getCallTimes());
+        logger.info("{}", getCallTimes());
         assertEquals(10, getCallTimes());
     }
 
@@ -737,12 +739,10 @@ class ScopeAsyncRetryTest {
                 });
             }
             sleepUninterruptibly(1, SECONDS);
-            System.out.println(futures.size());
             while (futures.peek() != null) {
-                Future tmpFuture = futures.poll();
+                Future<String> tmpFuture = futures.poll();
                 assertThrows(Throwable.class, tmpFuture::get);
             }
-            System.out.println(getCallTimes());
             assertEquals(calls, failCount.get());
             assertEquals(0, succCount.get());
         } finally {
