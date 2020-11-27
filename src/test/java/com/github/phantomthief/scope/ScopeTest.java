@@ -28,18 +28,26 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.annotation.Nullable;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -251,5 +259,46 @@ class ScopeTest {
                 runWithExistScope(scope, command::run);
             });
         }
+    }
+
+    @Test
+    void testFutureCallback() throws Throwable {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicBoolean flag = new AtomicBoolean(false);
+
+        runWithNewScope(() -> {
+            TEST_KEY.set(1);
+            SettableFuture<Boolean> future = SettableFuture.create();
+            Futures.addCallback(future, ScopeUtils.wrapWithScope(new FutureCallback<Boolean>() {
+                @Override
+                public void onSuccess(@Nullable Boolean aBoolean) {
+                    try {
+                        Integer integer = TEST_KEY.get();
+                        if (integer == 1) {
+                            flag.set(true);
+                        }
+                    } finally {
+                        latch.countDown();
+                    }
+                }
+
+                @Override
+                public void onFailure(Throwable throwable) {
+                    try {
+                        Integer integer = TEST_KEY.get();
+                        if (integer == 1) {
+                            flag.set(true);
+                        }
+                    } finally {
+                        latch.countDown();
+                    }
+                }
+            }), executor);
+            future.setException(new Throwable());
+            latch.await();
+            Assertions.assertTrue(flag.get());
+        });
     }
 }
