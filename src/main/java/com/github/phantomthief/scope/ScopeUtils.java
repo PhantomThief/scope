@@ -28,7 +28,10 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.MapMaker;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -149,5 +152,26 @@ public final class ScopeUtils {
             // 希望业务调用这个，这样可以更早的回收，而不用等到GC阶段
             MAP.remove(this);
         }
+    }
+
+    /**
+     * for {@link Futures#addCallback}
+     */
+    @Nonnull
+    public static <U> FutureCallback<U> wrapWithScope(@Nonnull FutureCallback<U> futureCallback) {
+
+        Preconditions.checkNotNull(futureCallback);
+        Scope currentScope = getCurrentScope();
+        return new FutureCallback<U>() {
+            @Override
+            public void onSuccess(@Nullable U u) {
+                runWithExistScope(currentScope, () -> futureCallback.onSuccess(u));
+            }
+
+            @Override
+            public void onFailure(Throwable throwable) {
+                runWithExistScope(currentScope, () -> futureCallback.onFailure(throwable));
+            }
+        };
     }
 }
