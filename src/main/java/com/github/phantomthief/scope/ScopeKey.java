@@ -15,10 +15,16 @@ public final class ScopeKey<T> {
 
     private final T defaultValue;
     private final Supplier<T> initializer;
+    private final boolean enableNullProtection;
 
     private ScopeKey(T defaultValue, Supplier<T> initializer) {
+        this(defaultValue, initializer, false);
+    }
+
+    private ScopeKey(T defaultValue, Supplier<T> initializer, boolean enableNullProtection) {
         this.defaultValue = defaultValue;
         this.initializer = initializer;
+        this.enableNullProtection = enableNullProtection;
     }
 
     @Nonnull
@@ -63,8 +69,32 @@ public final class ScopeKey<T> {
 
     /**
      * @param initializer 初始化ScopeKey（仅在Scope有效时）
-     *
+     * <p>
      * 等效代码:（调用 {@link #get} 时）
+     * <p>
+     * <pre> {@code
+     * T obj = SCOPE_KEY.get();
+     * if (obj == null) {
+     *     obj = initializer.get();
+     *     SCOPE_KEY.set(obj);
+     * }
+     * return obj;
+     * }</pre>
+     * <p>
+     * 注意，如果 initializer 返回 {@code null}，每次访问时都会重复初始化执行；
+     * 虽然该问题是预期外的，但是考虑到业务如果刚好依赖了此 bug，可能直接修复会产生行为异常，并因此产生不容易发现的意外，所以提供了重载版本修正：
+     * 对于可能返回 {@code null} 的场景，请使用 {@link #withInitializer(boolean, Supplier)} 版本，并传递参数 {@code true}
+     */
+    @Nonnull
+    public static <T> ScopeKey<T> withInitializer(Supplier<T> initializer) {
+        return withInitializer(false, initializer);
+    }
+
+    /**
+     * @param initializer 初始化ScopeKey（仅在Scope有效时）
+     * <p>
+     * 等效代码:（调用 {@link #get} 时）
+     * <p>
      * <pre> {@code
      * T obj = SCOPE_KEY.get();
      * if (obj == null) {
@@ -75,8 +105,8 @@ public final class ScopeKey<T> {
      * }</pre>
      */
     @Nonnull
-    public static <T> ScopeKey<T> withInitializer(Supplier<T> initializer) {
-        return new ScopeKey<>(null, initializer);
+    public static <T> ScopeKey<T> withInitializer(boolean enableNullProtection, Supplier<T> initializer) {
+        return new ScopeKey<>(null, initializer, enableNullProtection);
     }
 
     public T get() {
@@ -93,6 +123,10 @@ public final class ScopeKey<T> {
 
     T defaultValue() {
         return defaultValue;
+    }
+
+    boolean enableNullProtection() {
+        return enableNullProtection;
     }
 
     /**
