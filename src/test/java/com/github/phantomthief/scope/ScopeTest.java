@@ -36,6 +36,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nullable;
 
@@ -100,6 +101,40 @@ class ScopeTest {
             assertEquals(test2.get(), x);
             Scope currentScope = getCurrentScope();
             assertEquals(currentScope.get(test2), x);
+        });
+    }
+
+    @Test
+    void testInitNull() {
+        AtomicInteger counter = new AtomicInteger();
+        ScopeKey<Object> test2 = withInitializer(() -> {
+            counter.incrementAndGet();
+            return null;
+        });
+        assertNull(test2.get());
+        assertEquals(0, counter.get());
+        runWithNewScope(() -> {
+            assertNull(test2.get());
+            assertEquals(1, counter.get());
+            assertNull(test2.get());
+            assertEquals(2, counter.get());
+        });
+    }
+
+    @Test
+    void testInitNullProtection() {
+        AtomicInteger counter = new AtomicInteger();
+        ScopeKey<Object> test2 = withInitializer(true,() -> {
+            counter.incrementAndGet();
+            return null;
+        });
+        assertNull(test2.get());
+        assertEquals(0, counter.get());
+        runWithNewScope(() -> {
+            assertNull(test2.get());
+            assertEquals(1, counter.get());
+            assertNull(test2.get());
+            assertEquals(1, counter.get());
         });
     }
 

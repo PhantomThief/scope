@@ -54,6 +54,8 @@ public final class Scope {
 
     private final ConcurrentMap<ScopeKey<?>, Object> values = new ConcurrentHashMap<>();
 
+    private final ConcurrentMap<ScopeKey<?>, Boolean> enableNullProtections = new ConcurrentHashMap<>();
+
     @Beta
     public static boolean fastThreadLocalEnabled() {
         try {
@@ -182,9 +184,16 @@ public final class Scope {
         if (value == null && key.initializer() != null) {
             // 这里不使用computeIfAbsent保证原子性，是因为computeIfAbsent会有几率造成同桶冲撞
             // 而实际上，这里的原子性意义不大，就不浪费时间和精力了
+            if (enableNullProtections.containsKey(key)) {
+                return null;
+            }
             value = key.initializer().get();
             if (value != null) {
                 values.put(key, value);
+            } else {
+                if (key.enableNullProtection()) {
+                    enableNullProtections.put(key, true);
+                }
             }
         }
         return value == null ? key.defaultValue() : value;
