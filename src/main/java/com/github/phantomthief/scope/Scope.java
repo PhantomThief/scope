@@ -165,6 +165,9 @@ public final class Scope {
         SCOPE_THREAD_LOCAL.remove();
     }
 
+    /**
+     * @return 返回当前请求的 {@link Scope}，当请求线程不在 {@link Scope} 绑定状态时，返回 {@code null}
+     */
     @Nullable
     public static Scope getCurrentScope() {
         return SCOPE_THREAD_LOCAL.get();
