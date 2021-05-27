@@ -39,10 +39,12 @@ import com.google.common.annotations.Beta;
  * TODO: 当前实现是一种比较简易的方式，直接把所有Scope放到一个ThreadLocal里。
  * 实际上这样在使用过程中会有二次hash查询的问题，对性能会有些许的影响，更好的做法是：
  * 直接使用ThreadLocal（也就是使用内部的ThreadLocalMap），同时在Scope拷贝和清理时，维护一个额外的Set，进行ThreadLocal拷贝。
- *
+ * <p/>
  * 这样的优化考虑是：Scope正常访问的频率很高，而线程切换拷贝的概率比较低。
  * 目前这个实现参考了 GRPC 的 Context API 以及 Spring 的 RequestContext，
  * 相对比较简单，目前效率也可以接受。等到需要榨取性能时再对这个实现动手吧。
+ * <p/>
+ * 注意: 本实现并不充当对 ThreadLocal 性能提升的作用（虽然在有 FastThreadLocal 使用条件下并开启开关后，会优先使用 FastThreadLocal 以提升性能）；
  *
  * @author w.vela
  */
