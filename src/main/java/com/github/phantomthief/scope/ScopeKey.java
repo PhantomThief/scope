@@ -9,6 +9,12 @@ import javax.annotation.Nonnull;
 /**
  * 强类型数据读写的封装
  *
+ * <p>
+ *  如果多个线程共享了一个Scope，那么他们对于{@link ScopeKey}的get/set调用是操作的同一个值，这一点和{@link ThreadLocal}不一样，{@link ThreadLocal} 每个线程总是访问自己的一份变量。
+ *  因而，{@link ScopeKey}也不能在所有场合都无脑替换{@link ThreadLocal}。
+ *  更多信息参考 {@link Scope}的文档。
+ * </p>
+ *
  * @author w.vela
  */
 public final class ScopeKey<T> {
