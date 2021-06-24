@@ -44,8 +44,15 @@ import com.google.common.annotations.Beta;
  * 目前这个实现参考了 GRPC 的 Context API 以及 Spring 的 RequestContext，
  * 相对比较简单，目前效率也可以接受。等到需要榨取性能时再对这个实现动手吧。
  * <p/>
+ * <p>
  * 注意: 本实现并不充当对 ThreadLocal 性能提升的作用（虽然在有 FastThreadLocal 使用条件下并开启开关后，会优先使用 FastThreadLocal 以提升性能）；
- *
+ * </p>
+ * <p>
+ * 注意: 在Scope提供的传播已有Scope的方法中，没有对Scope做拷贝，如果使用{@link #supplyWithExistScope(Scope, ThrowableSupplier)}, {@link #runWithExistScope(Scope, ThrowableRunnable)}
+ * 等方法在不同的线程传递Scope，那么多个线程会共享同一个Scope实例。
+ * 如果多个线程共享了一个Scope，那么他们对于{@link ScopeKey}的get/set调用是操作的同一个值，这一点和{@link ThreadLocal}不一样，{@link ThreadLocal}每个线程总是访问自己的一份变量。
+ * 因而，{@link ScopeKey}也不能在所有场合都无脑替换{@link ThreadLocal}。
+ * </p>
  * @author w.vela
  */
 public final class Scope {
