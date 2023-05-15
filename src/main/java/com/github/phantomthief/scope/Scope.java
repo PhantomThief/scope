@@ -65,6 +65,10 @@ public final class Scope {
 
     private final ConcurrentMap<ScopeKey<?>, Boolean> enableNullProtections = new ConcurrentHashMap<>();
 
+    static final String SCOPE_USE_SYNCHRONIZED_PARAM = "SCOPE_USE_SYNCHRONIZED";
+
+    private static final boolean SCOPE_USE_SYNCHRONIZED = Boolean.getBoolean(SCOPE_USE_SYNCHRONIZED_PARAM);
+
     @Beta
     public static boolean fastThreadLocalEnabled() {
         try {
@@ -190,8 +194,41 @@ public final class Scope {
         }
     }
 
-    @SuppressWarnings("unchecked")
     public <T> T get(@Nonnull ScopeKey<T> key) {
+        if (SCOPE_USE_SYNCHRONIZED) {
+            return getSynchronized(key);
+        }
+        return getNormal(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T getSynchronized(@Nonnull ScopeKey<T> key) {
+        T value = (T) values.get(key);
+        if (value == null && key.initializer() != null) {
+            synchronized (this) {
+                value = (T) values.get(key);
+                // computeIfAbsent会有几率造成同桶冲撞，java8之后会出现IllegalStateException recursive update
+                // 因此这里使用synchronized双重锁检验
+                if (value == null && key.initializer() != null) {
+                    if (enableNullProtections.containsKey(key)) {
+                        return null;
+                    }
+                    value = key.initializer().get();
+                    if (value != null) {
+                        values.put(key, value);
+                    } else {
+                        if (key.enableNullProtection()) {
+                            enableNullProtections.put(key, true);
+                        }
+                    }
+                }
+            }
+        }
+        return value == null ? key.defaultValue() : value;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T getNormal(@Nonnull ScopeKey<T> key) {
         T value = (T) values.get(key);
         if (value == null && key.initializer() != null) {
             // 这里不使用computeIfAbsent保证原子性，是因为computeIfAbsent会有几率造成同桶冲撞
