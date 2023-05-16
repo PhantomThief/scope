@@ -272,7 +272,7 @@ class ScopeTest {
         return executor;
     }
 
-    private static class ScopeThreadPoolExecutor extends ThreadPoolExecutor {
+    static class ScopeThreadPoolExecutor extends ThreadPoolExecutor {
 
         ScopeThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime,
                 TimeUnit unit, BlockingQueue<Runnable> workQueue) {
