@@ -14,6 +14,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.Map.Entry;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -69,6 +70,10 @@ public final class ScopeUtils {
             @Nonnull Supplier<T> supplier) {
         return () -> supplyWithExistScope(scope, supplier::get);
     }
+    private static <T> Callable<T> wrapCallableExistScope(@Nullable Scope scope,
+            @Nonnull Supplier<T> supplier) {
+        return () -> supplyWithExistScope(scope, supplier::get);
+    }
 
     public static void runAsyncWithCurrentScope(@Nonnull Runnable runnable,
             @Nonnull Executor executor) {
@@ -84,13 +89,13 @@ public final class ScopeUtils {
     @Nonnull
     public static <U> Future<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
             @Nonnull ExecutorService executor) {
-        return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
+        return executor.submit(wrapCallableExistScope(getCurrentScope(), supplier));
     }
 
     @Nonnull
     public static <U> ListenableFuture<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
             @Nonnull ListeningExecutorService executor) {
-        return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
+        return executor.submit(wrapCallableExistScope(getCurrentScope(), supplier));
     }
 
     /**
