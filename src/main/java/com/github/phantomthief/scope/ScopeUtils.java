@@ -70,6 +70,14 @@ public final class ScopeUtils {
             @Nonnull Supplier<T> supplier) {
         return () -> supplyWithExistScope(scope, supplier::get);
     }
+
+    /**
+     * 入参顺序调整，传入scope进入新线程
+     * @param scope
+     * @param supplier
+     * @return
+     * @param <T>
+     */
     private static <T> Callable<T> wrapCallableExistScope(@Nullable Scope scope,
             @Nonnull Supplier<T> supplier) {
         return () -> supplyWithExistScope(scope, supplier::get);
