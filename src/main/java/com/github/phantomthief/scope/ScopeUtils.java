@@ -14,6 +14,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.Map.Entry;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -70,6 +71,18 @@ public final class ScopeUtils {
         return () -> supplyWithExistScope(scope, supplier::get);
     }
 
+    /**
+     * 入参顺序调整，传入scope进入新线程
+     * @param scope
+     * @param supplier
+     * @return
+     * @param <T>
+     */
+    private static <T> Callable<T> wrapCallableExistScope(@Nullable Scope scope,
+            @Nonnull Supplier<T> supplier) {
+        return () -> supplyWithExistScope(scope, supplier::get);
+    }
+
     public static void runAsyncWithCurrentScope(@Nonnull Runnable runnable,
             @Nonnull Executor executor) {
         executor.execute(wrapRunnableExistScope(getCurrentScope(), runnable));
@@ -84,13 +97,13 @@ public final class ScopeUtils {
     @Nonnull
     public static <U> Future<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
             @Nonnull ExecutorService executor) {
-        return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
+        return executor.submit(wrapCallableExistScope(getCurrentScope(), supplier));
     }
 
     @Nonnull
     public static <U> ListenableFuture<U> supplyAsyncWithCurrentScope(@Nonnull Supplier<U> supplier,
             @Nonnull ListeningExecutorService executor) {
-        return executor.submit(() -> wrapSupplierExistScope(getCurrentScope(), supplier).get());
+        return executor.submit(wrapCallableExistScope(getCurrentScope(), supplier));
     }
 
     /**
