@@ -2,6 +2,7 @@ package com.github.phantomthief.scope;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -61,7 +62,7 @@ public final class Scope {
 
     private static final SubstituteThreadLocal<Scope> SCOPE_THREAD_LOCAL = MyThreadLocalFactory.create();
 
-    private final ConcurrentMap<ScopeKey<?>, Object> values = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ScopeKey<?>, Holder<?>> values = new ConcurrentHashMap<>();
 
     private final ConcurrentMap<ScopeKey<?>, Boolean> enableNullProtections = new ConcurrentHashMap<>();
 
@@ -184,7 +185,7 @@ public final class Scope {
 
     public <T> void set(@Nonnull ScopeKey<T> key, T value) {
         if (value != null) {
-            values.put(key, value);
+            values.put(key, new Holder<>(value));
         } else {
             values.remove(key);
         }
@@ -192,22 +193,59 @@ public final class Scope {
 
     @SuppressWarnings("unchecked")
     public <T> T get(@Nonnull ScopeKey<T> key) {
-        T value = (T) values.get(key);
-        if (value == null && key.initializer() != null) {
-            // 这里不使用computeIfAbsent保证原子性，是因为computeIfAbsent会有几率造成同桶冲撞
-            // 而实际上，这里的原子性意义不大，就不浪费时间和精力了
-            if (enableNullProtections.containsKey(key)) {
+        Holder<T> holder = (Holder<T>) values.get(key);
+        if (holder == null) {
+            holder = (Holder<T>) values.computeIfAbsent(key, k -> new Holder<T>());
+        }
+
+        return holder.getOrCreate(key, enableNullProtections);
+    }
+
+    private static class Holder<T> {
+        private T value;
+
+        public Holder() {
+        }
+
+        public Holder(T value) {
+            this.value = value;
+        }
+
+        public T getOrCreate(ScopeKey<T> key, ConcurrentMap<ScopeKey<?>, Boolean> enableNullProtections) {
+            if (value != null) {
+                return value;
+            }
+            if (key.initializer() == null) {
+                return key.defaultValue();
+            }
+
+            return create(key, enableNullProtections);
+        }
+
+        private synchronized T create(ScopeKey<T> key, ConcurrentMap<ScopeKey<?>, Boolean> enableNullProtections) {
+            if (value != null) {
+                return value;
+            }
+            final Supplier<T> initializer = key.initializer();
+            if (initializer == null) {
+                return key.defaultValue();
+            }
+
+            if(enableNullProtections.containsKey(key)){
                 return null;
             }
-            value = key.initializer().get();
-            if (value != null) {
-                values.put(key, value);
-            } else {
-                if (key.enableNullProtection()) {
-                    enableNullProtections.put(key, true);
-                }
+
+            final T v = initializer.get();
+            if(v != null){
+                this.value = v;
+                return v;
             }
+
+            if(key.enableNullProtection()){
+                enableNullProtections.put(key, true);
+            }
+
+            return key.defaultValue();
         }
-        return value == null ? key.defaultValue() : value;
     }
 }
