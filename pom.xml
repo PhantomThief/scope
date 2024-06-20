@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.phantomthief</groupId>
     <artifactId>scope</artifactId>
-    <version>1.0.23-SNAPSHOT</version>
+    <version>1.0.23</version>
     <properties>
         <!-- dep -->
         <more-lambdas.version>0.1.8</more-lambdas.version>
